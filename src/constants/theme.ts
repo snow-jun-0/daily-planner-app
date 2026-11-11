@@ -63,3 +63,90 @@ export const Spacing = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+/**
+ * Daily planner design tokens — carried over 1:1 from the web (React) version.
+ * Light-mode only for now; a dark palette can be added later.
+ *
+ * Black-and-white minimal base: `accent` (black) drives all UI chrome
+ * (active tab, buttons, progress rings, checkmarks, "오늘" chips). Color is
+ * reserved for meaning only — priority tags (red/blue/faint) and schedule
+ * block types (`green`/`sage`/`highlight`/`blue`/`red`), which stay as-is.
+ */
+export const Planner = {
+  /** screen background — near-white off-white */
+  paper: '#FAFAFA',
+  /** card surface — pure white, floats on `paper` */
+  card: '#FFFFFF',
+  /** primary text */
+  ink: '#111111',
+  /** secondary / muted text */
+  faint: '#9B9B9B',
+  /** hairline borders */
+  line: '#EAEAEA',
+  /** the app's single accent color (black) — active tab, buttons, progress
+   *  ring, checkmarks, "오늘" chip, toggle ON state */
+  accent: '#111111',
+  /** soft neutral background for accent-adjacent surfaces, e.g. D-day
+   *  badges, "+추가" buttons, connected badges */
+  accentSoft: '#F0F0F0',
+  /** schedule block colors — kept saturated to distinguish event types on
+   *  the timetable / monthly dots, not used as UI chrome */
+  green: '#2F6B4F',
+  sage: '#9DB8A4',
+  highlight: '#F5D547',
+  /** soft highlight-tinted background, e.g. the "오늘" badge on memo cards */
+  highlightSoft: '#FBF0C7',
+  /** priority tag: 높음 (high) */
+  red: '#C0392B',
+  /** priority tag: 보통 (mid) */
+  blue: '#2C5AA0',
+  /** text/icons on top of a saturated dark surface (accent buttons, filled
+   *  checkmarks, dark schedule blocks) */
+  onAccent: '#FFFFFF',
+  onAccentFaint: 'rgba(255,255,255,0.72)',
+} as const;
+
+/** 앱 테마 토큰 형태 (라이트/다크 공통) */
+export type AppTheme = Record<keyof typeof Planner, string>;
+
+/** 다크 팔레트 — v2의 흑백(B&W) 톤을 유지한 어두운 배색 */
+export const PlannerDark: AppTheme = {
+  paper: '#121212',
+  card: '#1E1E1E',
+  ink: '#F0F0F0',
+  faint: '#8A8A8A',
+  line: '#2E2E2E',
+  accent: '#F0F0F0',
+  accentSoft: '#2A2A2A',
+  green: '#4A9370',
+  sage: '#6F8C7A',
+  highlight: '#E7C24A',
+  highlightSoft: '#3A3410',
+  red: '#E0695C',
+  blue: '#6FA3D6',
+  onAccent: '#111111',
+  onAccentFaint: 'rgba(17,17,17,0.72)',
+};
+
+export const PlannerRadius = {
+  card: 16,
+  block: 10,
+  chip: 999,
+} as const;
+
+/** Soft, uniform card shadow (iOS) + elevation (Android). */
+export const PlannerShadow = {
+  shadowColor: Planner.ink,
+  shadowOpacity: 0.06,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+} as const;
+
+/** Serif family for planner headings (system serif until custom fonts land). */
+export const PlannerSerif = Platform.select({
+  ios: 'Georgia',
+  android: 'serif',
+  default: 'serif',
+});
