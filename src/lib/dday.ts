@@ -1,4 +1,5 @@
 import { getItem, setItem } from './storage';
+import { scheduleAutoBackup } from './backup';
 
 // v1 lib.ts의 D-Day 로직을 AsyncStorage 버전으로 이식.
 export type DDay = {
@@ -25,6 +26,7 @@ export async function loadDDays(): Promise<DDay[]> {
 
 export async function saveDDays(list: DDay[]): Promise<void> {
   await setItem(DDAY_KEY, list);
+  scheduleAutoBackup();
 }
 
 export async function addDDay(input: { title: string; date: string; color: string }): Promise<DDay> {

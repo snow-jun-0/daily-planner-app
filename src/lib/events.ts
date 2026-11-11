@@ -1,3 +1,4 @@
+import { scheduleAutoBackup } from './backup';
 import { todayKey } from './date';
 import { getItem, setItem } from './storage';
 import { syncWidgets } from './widget-sync';
@@ -32,6 +33,7 @@ export async function loadEvents(date: string): Promise<Event[]> {
 export async function saveEvents(date: string, events: Event[]): Promise<void> {
   await setItem(eventsKey(date), events);
   if (date === todayKey()) void syncWidgets();
+  scheduleAutoBackup();
 }
 
 export function createEvent(title: string, start: number, end: number, color: EventColor): Event {

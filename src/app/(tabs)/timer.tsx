@@ -146,7 +146,7 @@ export default function TimerScreen() {
         size={RING_SIZE}
         minutes={phase === 'focus' ? settings.focusMinutes : settings.breakMinutes}
         remainingRatio={totalMs > 0 ? remainingMs / totalMs : 1}
-        editable={status === 'idle' && phase === 'focus'}
+        editable={phase === 'focus' && status !== 'overrun'}
         onChangeMinutes={(m) => void pomodoro.setFocusMinutes(m)}
         maxMinutes={60}
         pieColor={theme.red}>

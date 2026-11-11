@@ -1,4 +1,5 @@
 import { todayKey } from './date';
+import { scheduleAutoBackup } from './backup';
 import { getItem, getKeysWithPrefix, setItem } from './storage';
 import { syncWidgets } from './widget-sync';
 
@@ -33,6 +34,7 @@ export async function loadTasks(date: string): Promise<Task[]> {
 export async function saveTasks(date: string, tasks: Task[]): Promise<void> {
   await setItem(tasksKey(date), tasks);
   if (date === todayKey()) void syncWidgets();
+  scheduleAutoBackup();
 }
 
 export function createTask(text: string, priority: TaskPriority): Task {

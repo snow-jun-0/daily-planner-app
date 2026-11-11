@@ -8,6 +8,7 @@ import { PlannerScreen } from '@/components/planner/planner-screen';
 import { PlannerRadius, PlannerSerif, Spacing } from '@/constants/theme';
 import type { AppTheme } from '@/constants/theme';
 import { useTheme, useThemeControl } from '@/constants/theme-context';
+import { restoreFromCloud, uploadBackup } from '@/lib/backup';
 import { signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
 import { syncGoogleCalendar } from '@/lib/gcal';
 import { cancelDailyReflection, scheduleDailyReflection } from '@/lib/notify';
@@ -55,6 +56,32 @@ export default function SettingsScreen() {
         Alert.alert('로그인 실패', msg);
       });
     }
+  };
+  const handleBackup = () => {
+    if (!session) {
+      Alert.alert('데이터 백업', '먼저 구글 로그인이 필요해요');
+      return;
+    }
+    void uploadBackup().then((ok) =>
+      Alert.alert('데이터 백업', ok ? '백업 완료!' : '백업 실패 — 잠시 후 다시 시도해줘'),
+    );
+  };
+  const handleRestore = () => {
+    if (!session) {
+      Alert.alert('백업 복원', '먼저 구글 로그인이 필요해요');
+      return;
+    }
+    Alert.alert('백업 복원', '클라우드 백업으로 덮어쓸까요? 지금 기기의 데이터는 사라져요', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '복원',
+        style: 'destructive',
+        onPress: () =>
+          void restoreFromCloud().then((ok) =>
+            Alert.alert('백업 복원', ok ? '복원 완료! 앱을 다시 켜줘' : '클라우드에 백업이 없어'),
+          ),
+      },
+    ]);
   };
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [reviewAlert, setReviewAlert] = useState(false);
@@ -124,6 +151,18 @@ export default function SettingsScreen() {
             </View>
           }
           onPress={handleGoogle}
+        />
+        <SettingsRow
+          icon="cloud-upload-outline"
+          title="데이터 백업"
+          subtitle={session ? '지금 클라우드에 저장' : '로그인 필요'}
+          onPress={handleBackup}
+        />
+        <SettingsRow
+          icon="cloud-download-outline"
+          title="백업 복원"
+          subtitle="클라우드에서 불러오기"
+          onPress={handleRestore}
         />
         <Divider />
         <SettingsRow

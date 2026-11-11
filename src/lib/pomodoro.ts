@@ -274,8 +274,14 @@ export function endBreak(): void {
 export async function setFocusMinutes(minutes: number): Promise<void> {
   const settings = { ...state.settings, focusMinutes: minutes };
   state = { ...state, settings };
-  if (state.status === 'idle' && state.phase === 'focus') {
-    state = { ...state, remainingMs: getPhaseDurationMs('focus', settings) };
+  if (state.phase === 'focus') {
+    const full = getPhaseDurationMs('focus', settings);
+    if (state.status === 'running' && state.endTime != null) {
+      // 실행 중 드래그: 새 집중 시간으로 남은 시간·종료 시각을 다시 맞춘다
+      state = { ...state, remainingMs: full, endTime: Date.now() + full };
+    } else if (state.status === 'idle' || state.status === 'paused') {
+      state = { ...state, remainingMs: full };
+    }
   }
   emit();
   await saveSettings(settings);

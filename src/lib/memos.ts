@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { scheduleAutoBackup } from './backup';
 import { todayKey } from './date';
 import { getItem, setItem } from './storage';
 
@@ -24,6 +25,7 @@ export async function loadMemo(date: string): Promise<string> {
 
 export async function saveMemo(date: string, text: string): Promise<void> {
   await setItem(memoKey(date), text);
+  scheduleAutoBackup();
 }
 
 /** Every non-empty memo across all dates, for the "메모" tab's full list. */

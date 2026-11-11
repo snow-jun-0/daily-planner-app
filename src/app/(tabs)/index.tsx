@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DayHeader } from '@/components/planner/day-header';
@@ -21,6 +21,7 @@ import { syncGoogleCalendar } from '@/lib/gcal';
 import { getAutoSyncCalendar } from '@/lib/settings';
 import { consumePendingViewDate } from '@/lib/navigation';
 import { DEFAULT_TASKLIST, deleteGTask, insertGTask, setGTaskStatus } from '@/lib/gtasks';
+import { maybeRestoreOnLogin } from '@/lib/backup';
 import { runReverseSync } from '@/lib/task-sync';
 import { createTask, loadTasks, saveTasks, type Task, type TaskPriority } from '@/lib/tasks';
 
@@ -35,6 +36,7 @@ export default function DailyScreen() {
   const [ddayModal, setDdayModal] = useState(false);
   const { session } = useAuthSession();
   const reverseSyncedFor = useRef<string | null>(null);
+  const lastResyncAt = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
   const isToday = viewDate === todayKey();
   const doneCount = tasks.filter((t) => t.done).length;
@@ -65,6 +67,7 @@ export default function DailyScreen() {
         const uid = session.user?.id ?? 'signed-in';
         if (reverseSyncedFor.current !== uid) {
           reverseSyncedFor.current = uid;
+          await maybeRestoreOnLogin().catch(() => {});
           await runReverseSync().catch(() => {});
         }
       }
@@ -83,6 +86,27 @@ export default function DailyScreen() {
       cancelled = true;
     };
   }, [viewDate, session]);
+
+  // 앱이 백그라운드에서 돌아오면(딴 데서 구글 할일 수정하고 복귀 등) 역동기화 다시
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active' || !session) return;
+      if (Date.now() - lastResyncAt.current < 60_000) return;
+      lastResyncAt.current = Date.now();
+      void (async () => {
+        await runReverseSync().catch(() => {});
+        const [t, e, m] = await Promise.all([
+          loadTasks(viewDate),
+          loadEvents(viewDate),
+          loadMemo(viewDate),
+        ]);
+        setTasks(t);
+        setEvents(e);
+        setMemo(m);
+      })();
+    });
+    return () => sub.remove();
+  }, [session, viewDate]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
