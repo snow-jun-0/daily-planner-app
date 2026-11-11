@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -204,6 +204,7 @@ export default function DailyScreen() {
             onAdd={handleAdd}
             onToggle={handleToggle}
             onDelete={handleDelete}
+            onViewAll={() => router.push('/all-tasks' as never)}
           />
 
           <MemoCard value={memo} onSave={handleSaveMemo} />

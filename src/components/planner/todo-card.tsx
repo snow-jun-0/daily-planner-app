@@ -14,6 +14,7 @@ type TodoCardProps = {
   onAdd: (text: string, priority: TaskPriority) => void;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
+  onViewAll?: () => void;
 };
 
 const priorityMeta = (theme: AppTheme): Record<TaskPriority, { label: string; color: string }> => ({
@@ -24,7 +25,7 @@ const priorityMeta = (theme: AppTheme): Record<TaskPriority, { label: string; co
 
 const PRIORITY_ORDER: TaskPriority[] = ['high', 'mid', 'low'];
 
-export function TodoCard({ tasks, onAdd, onToggle, onDelete }: TodoCardProps) {
+export function TodoCard({ tasks, onAdd, onToggle, onDelete, onViewAll }: TodoCardProps) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -79,6 +80,12 @@ export function TodoCard({ tasks, onAdd, onToggle, onDelete }: TodoCardProps) {
           );
         })}
       </View>
+
+      {onViewAll ? (
+        <Pressable onPress={onViewAll} hitSlop={6} style={styles.viewAll}>
+          <Text style={styles.viewAllText}>전체 할 일 보기 →</Text>
+        </Pressable>
+      ) : null}
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <Pressable style={styles.overlay} onPress={() => setModalVisible(false)}>
@@ -139,6 +146,8 @@ export function TodoCard({ tasks, onAdd, onToggle, onDelete }: TodoCardProps) {
 
 const makeStyles = (theme: AppTheme) =>
   StyleSheet.create({
+  viewAll: { marginTop: Spacing.two, alignItems: 'center', paddingVertical: Spacing.two },
+  viewAllText: { color: theme.faint, fontSize: 13, fontWeight: '600' },
   list: {
     marginTop: Spacing.three,
     gap: Spacing.three,
