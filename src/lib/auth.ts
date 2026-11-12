@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { Alert } from 'react-native';
 import { useEffect, useState } from 'react';
 
 import { syncGoogleCalendar } from './gcal';
@@ -11,16 +12,14 @@ WebBrowser.maybeCompleteAuthSession();
 const redirectTo = Linking.createURL('auth/callback');
 
 /** 로그인 때 받은 provider_refresh_token을 Supabase 테이블에 저장 (Edge Function이 사용) */
-async function storeRefreshToken(session: Session | null): Promise<void> {
-  const rt = session?.provider_refresh_token;
-  if (!rt || !session) return;
+async function storeRefreshToken(session: Session | null): Promise<string> {
+  if (!session) return 'no-session';
+  const rt = session.provider_refresh_token;
+  if (!rt) return 'no-refresh-token'; // 구글이 refresh token을 안 줌 (prompt/scope 문제)
   const { error } = await supabase
     .from('google_tokens')
     .upsert({ user_id: session.user.id, refresh_token: rt, updated_at: new Date().toISOString() });
-  if (error) {
-    // 테이블 미설정/RLS 등은 자동 갱신만 비활성 (로그인은 정상). 원인 파악용 로그.
-    console.warn('[google_tokens] refresh token 저장 실패:', error.message);
-  }
+  return error ? `error: ${error.message}` : 'ok';
 }
 
 /** 구글 OAuth 로그인 (PKCE + 인앱 브라우저) */
@@ -45,8 +44,11 @@ export async function signInWithGoogle(): Promise<void> {
       const { data: exData, error: exchangeError } =
         await supabase.auth.exchangeCodeForSession(String(code));
       if (exchangeError) throw exchangeError;
-      // 자동 토큰 갱신용: refresh token을 서버에 저장 (테이블/함수 미설정이면 조용히 무시)
-      await storeRefreshToken(exData.session);
+      // 자동 토큰 갱신용: refresh token을 서버에 저장
+      const saveStatus = await storeRefreshToken(exData.session);
+      if (saveStatus !== 'ok') {
+        Alert.alert('[디버그] 토큰 저장 상태', saveStatus);
+      }
       await syncGoogleCalendar().catch(() => {});
     }
   }
