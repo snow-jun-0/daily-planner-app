@@ -17,3 +17,7 @@ create policy "own insert" on public.google_tokens
 drop policy if exists "own update" on public.google_tokens;
 create policy "own update" on public.google_tokens
   for update using (auth.uid() = user_id);
+
+-- authenticated 역할에 테이블 접근 권한 부여 (RLS 정책은 그 위에서 행 단위로 제한).
+-- SQL Editor로 만든 테이블은 이 grant가 자동으로 안 붙는 경우가 있어 명시한다.
+grant select, insert, update, delete on public.google_tokens to authenticated;

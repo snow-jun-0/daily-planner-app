@@ -18,3 +18,5 @@ create policy "own backup insert" on public.user_backups
 drop policy if exists "own backup update" on public.user_backups;
 create policy "own backup update" on public.user_backups
   for update using (auth.uid() = user_id);
+
+grant select, insert, update, delete on public.user_backups to authenticated;
