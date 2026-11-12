@@ -14,12 +14,12 @@ const redirectTo = Linking.createURL('auth/callback');
 async function storeRefreshToken(session: Session | null): Promise<void> {
   const rt = session?.provider_refresh_token;
   if (!rt || !session) return;
-  try {
-    await supabase
-      .from('google_tokens')
-      .upsert({ user_id: session.user.id, refresh_token: rt, updated_at: new Date().toISOString() });
-  } catch {
-    // 테이블 미설정 등은 무시 — 자동 갱신만 비활성, 로그인은 정상
+  const { error } = await supabase
+    .from('google_tokens')
+    .upsert({ user_id: session.user.id, refresh_token: rt, updated_at: new Date().toISOString() });
+  if (error) {
+    // 테이블 미설정/RLS 등은 자동 갱신만 비활성 (로그인은 정상). 원인 파악용 로그.
+    console.warn('[google_tokens] refresh token 저장 실패:', error.message);
   }
 }
 
@@ -68,6 +68,8 @@ export function useAuthSession() {
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next);
+      // 로그인 시 refresh token이 세션에 담겨 오면 저장 (exchange 경로를 놓쳐도 보강)
+      if (next?.provider_refresh_token) void storeRefreshToken(next);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
