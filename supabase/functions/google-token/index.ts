@@ -30,8 +30,25 @@ Deno.serve(async (req) => {
   } = await userClient.auth.getUser();
   if (!user) return json({ error: 'unauthorized' }, 401);
 
-  // 2) refresh token 조회 (service role — RLS 우회)
   const admin = createClient(url, serviceKey);
+
+  // 저장 모드: 요청 body에 refresh_token이 오면 RLS 우회하여 저장하고 끝낸다.
+  let body: { refresh_token?: string } = {};
+  try {
+    body = await req.json();
+  } catch {
+    // body 없음 → 발급 모드
+  }
+  if (body.refresh_token) {
+    const { error: upErr } = await admin.from('google_tokens').upsert({
+      user_id: user.id,
+      refresh_token: body.refresh_token,
+      updated_at: new Date().toISOString(),
+    });
+    return json({ ok: !upErr, error: upErr?.message });
+  }
+
+  // 2) refresh token 조회 (service role — RLS 우회)
   const { data: row } = await admin
     .from('google_tokens')
     .select('refresh_token')

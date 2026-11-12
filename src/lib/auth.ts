@@ -16,10 +16,14 @@ async function storeRefreshToken(session: Session | null): Promise<string> {
   if (!session) return 'no-session';
   const rt = session.provider_refresh_token;
   if (!rt) return 'no-refresh-token'; // 구글이 refresh token을 안 줌 (prompt/scope 문제)
-  const { error } = await supabase
-    .from('google_tokens')
-    .upsert({ user_id: session.user.id, refresh_token: rt, updated_at: new Date().toISOString() });
-  return error ? `error: ${error.message}` : 'ok';
+  // Edge Function 경유로 저장 (service_role → RLS/세션 타이밍 문제 우회)
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+    'google-token',
+    { body: { refresh_token: rt } },
+  );
+  if (error) return `invoke: ${error.message}`;
+  if (data && data.ok === false) return `store: ${data.error ?? '?'}`;
+  return 'ok';
 }
 
 /** 구글 OAuth 로그인 (PKCE + 인앱 브라우저) */
