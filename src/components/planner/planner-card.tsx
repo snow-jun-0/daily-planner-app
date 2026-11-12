@@ -30,7 +30,7 @@ const makeStyles = (theme: AppTheme) =>
     backgroundColor: theme.card,
     borderColor: theme.line,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderRadius: PlannerRadius.card,
+    borderRadius: PlannerRadius.lg,
     padding: Spacing.three,
     ...PlannerShadow,
   },

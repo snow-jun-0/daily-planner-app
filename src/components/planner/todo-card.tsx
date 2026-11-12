@@ -17,10 +17,12 @@ type TodoCardProps = {
   onViewAll?: () => void;
 };
 
-const priorityMeta = (theme: AppTheme): Record<TaskPriority, { label: string; color: string }> => ({
-  high: { label: '높음', color: theme.red },
-  mid: { label: '보통', color: theme.blue },
-  low: { label: '낮음', color: theme.faint },
+const priorityMeta = (
+  theme: AppTheme,
+): Record<TaskPriority, { label: string; color: string; bg: string }> => ({
+  high: { label: '높음', color: theme.red, bg: theme.redSoft },
+  mid: { label: '보통', color: theme.blue, bg: theme.blueSoft },
+  low: { label: '낮음', color: theme.textSecondary, bg: theme.surface },
 });
 
 const PRIORITY_ORDER: TaskPriority[] = ['high', 'mid', 'low'];
@@ -69,7 +71,7 @@ export function TodoCard({ tasks, onAdd, onToggle, onDelete, onViewAll }: TodoCa
                 {item.text}
               </Text>
 
-              <View style={[styles.tag, { borderColor: meta.color }]}>
+              <View style={[styles.tag, { backgroundColor: meta.bg }]}>
                 <Text style={[styles.tagText, { color: meta.color }]}>{meta.label}</Text>
               </View>
 
@@ -188,9 +190,8 @@ const makeStyles = (theme: AppTheme) =>
   },
   tag: {
     borderRadius: PlannerRadius.chip,
-    borderWidth: StyleSheet.hairlineWidth * 2,
     paddingHorizontal: Spacing.two,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   tagText: {
     fontSize: 11,

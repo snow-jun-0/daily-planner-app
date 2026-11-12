@@ -5,7 +5,7 @@
 
 import '@/global.css';
 
-import { Platform } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
 
 export const Colors = {
   light: {
@@ -105,6 +105,16 @@ export const Planner = {
    *  checkmarks, dark schedule blocks) */
   onAccent: '#FFFFFF',
   onAccentFaint: 'rgba(255,255,255,0.72)',
+  /** fable 디자인 토큰 — 텍스트 위계 (secondary=보조, tertiary=가장 흐림) */
+  textSecondary: '#6B6B6B',
+  textTertiary: '#A3A3A3',
+  /** 입력창·탭 등 중립 표면 */
+  surface: '#F2F2F2',
+  /** 의미색 soft 배경 (우선순위/상태 뱃지) */
+  redSoft: '#FBEDEB',
+  blueSoft: '#EAF0F8',
+  amber: '#B07D0E',
+  amberSoft: '#FBF4E0',
 } as const;
 
 /** 앱 테마 토큰 형태 (라이트/다크 공통) */
@@ -127,20 +137,30 @@ export const PlannerDark: AppTheme = {
   blue: '#6FA3D6',
   onAccent: '#111111',
   onAccentFaint: 'rgba(17,17,17,0.72)',
+  textSecondary: '#A6A6A6',
+  textTertiary: '#6F6F6F',
+  surface: '#2A2A2A',
+  redSoft: '#3A201C',
+  blueSoft: '#1D2A40',
+  amber: '#E3B341',
+  amberSoft: '#3A3016',
 };
 
 export const PlannerRadius = {
   card: 16,
   block: 10,
   chip: 999,
+  sm: 8,
+  md: 12,
+  lg: 20,
 } as const;
 
 /** Soft, uniform card shadow (iOS) + elevation (Android). */
 export const PlannerShadow = {
-  shadowColor: Planner.ink,
-  shadowOpacity: 0.06,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 4 },
+  shadowColor: '#000000',
+  shadowOpacity: 0.05,
+  shadowRadius: 20,
+  shadowOffset: { width: 0, height: 6 },
   elevation: 2,
 } as const;
 
@@ -150,3 +170,21 @@ export const PlannerSerif = Platform.select({
   android: 'serif',
   default: 'serif',
 });
+
+/**
+ * 타이포 스케일 (fable 디자인) — 제목은 serif, 본문은 sans.
+ * 폰트 패밀리는 serif만 지정하고 본문은 시스템 기본(한글 대응)에 맡긴다.
+ * 커스텀 Noto 폰트는 추후 로드 (용량 고려).
+ */
+export const PlannerType = {
+  display: { fontFamily: PlannerSerif, fontSize: 30, lineHeight: 38, fontWeight: '600' },
+  titleM: { fontFamily: PlannerSerif, fontSize: 20, lineHeight: 28, fontWeight: '600' },
+  titleS: { fontFamily: PlannerSerif, fontSize: 17, lineHeight: 24, fontWeight: '600' },
+  labelStrong: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  label: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  body: { fontSize: 14, lineHeight: 21, fontWeight: '400' },
+  bodyMedium: { fontSize: 14, lineHeight: 21, fontWeight: '500' },
+  caption: { fontSize: 12, lineHeight: 17, fontWeight: '400' },
+  overline: { fontSize: 11, lineHeight: 14, fontWeight: '700', letterSpacing: 6 },
+  tab: { fontSize: 11, lineHeight: 14, fontWeight: '500' },
+} satisfies Record<string, TextStyle>;
