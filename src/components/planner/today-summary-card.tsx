@@ -24,6 +24,13 @@ type TodaySummaryCardProps = {
  * White card — `accent` (black) is used sparingly, on the progress ring and
  * the D-day badges.
  */
+/** D-7 이내(또는 D-DAY)면 임박으로 보고 빨강 강조 */
+function isUrgentDday(dday: string): boolean {
+  if (dday === 'D-DAY') return true;
+  const m = dday.match(/^D-(\d+)$/);
+  return m ? Number(m[1]) <= 7 : false;
+}
+
 export function TodaySummaryCard({ progress, ddays, onManage }: TodaySummaryCardProps) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -50,16 +57,21 @@ export function TodaySummaryCard({ progress, ddays, onManage }: TodaySummaryCard
             <Text style={styles.emptyText}>+ D-Day 추가하기</Text>
           </Pressable>
         ) : null}
-        {ddays.map((item) => (
-          <View key={`${item.label}-${item.dday}`} style={styles.ddayRow}>
-            <Text style={styles.ddayLabel} numberOfLines={1}>
-              {item.label}
-            </Text>
-            <View style={styles.ddayBadge}>
-              <Text style={styles.ddayBadgeText}>{item.dday}</Text>
+        {ddays.map((item) => {
+          const urgent = isUrgentDday(item.dday);
+          return (
+            <View key={`${item.label}-${item.dday}`} style={styles.ddayRow}>
+              <Text style={styles.ddayLabel} numberOfLines={1}>
+                {item.label}
+              </Text>
+              <View style={[styles.ddayBadge, urgent && styles.ddayBadgeUrgent]}>
+                <Text style={[styles.ddayBadgeText, urgent && styles.ddayBadgeTextUrgent]}>
+                  {item.dday}
+                </Text>
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
@@ -125,14 +137,20 @@ const makeStyles = (theme: AppTheme) =>
     fontWeight: '600',
   },
   ddayBadge: {
-    backgroundColor: theme.accentSoft,
+    backgroundColor: theme.surface,
     borderRadius: PlannerRadius.chip,
     paddingHorizontal: Spacing.two,
     paddingVertical: 2,
   },
+  ddayBadgeUrgent: {
+    backgroundColor: theme.redSoft,
+  },
   ddayBadgeText: {
-    color: theme.accent,
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: '700',
+  },
+  ddayBadgeTextUrgent: {
+    color: theme.red,
   },
 });
