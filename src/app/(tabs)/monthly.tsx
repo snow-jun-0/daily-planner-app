@@ -218,6 +218,21 @@ export default function MonthlyScreen() {
             );
           })}
         </View>
+
+        <View style={styles.legendRow}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: theme.blue }]} />
+            <Text style={styles.legendText}>일정</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: theme.green }]} />
+            <Text style={styles.legendText}>할 일</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: theme.amber }]} />
+            <Text style={styles.legendText}>메모</Text>
+          </View>
+        </View>
       </PlannerCard>
 
       {selectedDate && preview ? (
@@ -286,6 +301,16 @@ const makeStyles = (theme: AppTheme) =>
   previewDate: { color: theme.ink, fontSize: 15, fontWeight: '700' },
   previewOpen: { color: theme.accent, fontSize: 13, fontWeight: '600' },
   previewSummary: { color: theme.faint, fontSize: 13 },
+  legendRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.one,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 6, height: 6, borderRadius: 3 },
+  legendText: { color: theme.textSecondary, fontSize: 11 },
   calendarCard: {
     padding: Spacing.two,
   },
