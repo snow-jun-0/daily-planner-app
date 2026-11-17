@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -20,6 +22,14 @@ import {
 
 const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
 const ROW_H = 16;
+
+/** r행(1시간)에서 실제로 채운 칸의 과목들 — 왼쪽부터 몰아 그릴 때 쓴다 */
+export function hourActuals(day: DayTimetable, r: number): SubjectId[] {
+  return day.cells
+    .slice(r * COLS, r * COLS + COLS)
+    .map((c) => c.actual)
+    .filter((a): a is SubjectId => !!a);
+}
 
 function fmtTotal(min: number): string {
   return `${Math.floor(min / 60)}H ${String(min % 60).padStart(2, '0')}M`;
@@ -72,6 +82,13 @@ export function WeekGrid({ dateKey, cats, onSelectDate }: Props) {
           <Text style={styles.totalValue}>{fmtTotal(weekTotal)}</Text>
         </View>
         <View style={styles.totalRight}>
+          <Pressable
+            onPress={() => router.push(`/share-week?date=${dateKey}` as never)}
+            hitSlop={8}
+            style={styles.shareBtn}
+            accessibilityLabel="주간 공유">
+            <Ionicons name="share-outline" size={16} color={theme.ink} />
+          </Pressable>
           <Text style={styles.caption}>하루 평균 {(weekTotal / 7 / 60).toFixed(1)}시간</Text>
           {weekTotal > 0 ? (
             <Text style={styles.best}>가장 많이 한 날 · {DAY_NAMES[best]}</Text>
@@ -104,11 +121,7 @@ export function WeekGrid({ dateKey, cats, onSelectDate }: Props) {
             {r % 2 === 0 ? String((START_HOUR + r) % 24).padStart(2, '0') : ''}
           </Text>
           {days.map((d, di) => {
-            // 그 시간에 실제로 채운 칸들을 왼쪽부터 몰아 그린다
-            const filled = d.cells
-              .slice(r * COLS, r * COLS + COLS)
-              .map((c) => c.actual)
-              .filter((a): a is SubjectId => !!a);
+            const filled = hourActuals(d, r);
             return (
               <Pressable key={di} style={styles.hour} onPress={() => onSelectDate(keys[di])}>
                 {filled.map((id, k) => (
@@ -149,6 +162,7 @@ const makeStyles = (theme: AppTheme) =>
     totalLabel: { ...PlannerType.overline, color: theme.textTertiary },
     totalValue: { ...PlannerType.display, color: theme.ink },
     totalRight: { alignItems: 'flex-end' },
+    shareBtn: { padding: 4, marginBottom: 4 },
     caption: { ...PlannerType.caption, color: theme.textSecondary },
     best: { ...PlannerType.labelStrong, color: theme.ink },
     row: { flexDirection: 'row', alignItems: 'center', gap: 3 },
