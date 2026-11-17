@@ -83,7 +83,7 @@ export async function backupCounts(): Promise<Record<string, number>> {
     tasks: count('tasks:'),
     events: count('events:'),
     memos: count('memo:'),
-    ddays: count('dday:'),
+    ddays: count('dday:list'),
     timetableDays: keys.filter((k) => k.startsWith('timetable:')).length,
   };
 }

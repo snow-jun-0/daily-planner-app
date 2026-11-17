@@ -70,3 +70,21 @@ export function isDDaySoon(dateStr: string): boolean {
 export async function loadVisibleDDays(): Promise<DDay[]> {
   return (await loadDDays()).filter((d) => !isDDayPast(d.date));
 }
+
+// ---------- D-Day 역산 계획 (I7) ----------
+
+/** 목표 총 시간과 집계 시작일 — 시작일부터 채운 실제 시간을 목표에 셈 */
+export type DDayPlan = { targetHours: number; startDate: string };
+
+function planKey(id: string): string {
+  return `dday:plan:${id}`;
+}
+
+export async function loadDDayPlan(id: string): Promise<DDayPlan | null> {
+  return getItem<DDayPlan>(planKey(id));
+}
+
+export async function saveDDayPlan(id: string, plan: DDayPlan): Promise<void> {
+  await setItem(planKey(id), plan);
+  scheduleAutoBackup();
+}

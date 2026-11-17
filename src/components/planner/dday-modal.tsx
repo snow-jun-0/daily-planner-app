@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -69,6 +70,15 @@ export function DDayModal({ visible, onClose, onChanged }: Props) {
                     {d.title}
                   </Text>
                   <Text style={styles.rowDday}>{getDDayCount(d.date)}</Text>
+                  <Pressable
+                    onPress={() => {
+                      onClose();
+                      router.push(`/dday-plan?id=${d.id}` as never);
+                    }}
+                    hitSlop={8}
+                    accessibilityLabel="역산 계획">
+                    <Ionicons name="analytics-outline" size={16} color={Planner.faint} />
+                  </Pressable>
                   <Pressable onPress={() => del(d.id)} hitSlop={8}>
                     <Ionicons name="trash-outline" size={16} color={Planner.faint} />
                   </Pressable>
