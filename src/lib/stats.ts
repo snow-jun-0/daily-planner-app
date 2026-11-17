@@ -97,29 +97,3 @@ export async function loadMonthFocusStats(year: number, month: number): Promise<
   }
   return result;
 }
-
-export type MonthTaskStats = { totalDone: number; totalTasks: number; rate: number };
-
-/** 한 달치 할 일 완료율 집계 */
-export async function loadMonthTaskStats(year: number, month: number): Promise<MonthTaskStats> {
-  const prefix = `tasks:${year}-${String(month + 1).padStart(2, '0')}-`;
-  const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(prefix));
-  let done = 0;
-  let total = 0;
-  if (keys.length > 0) {
-    const pairs = await AsyncStorage.multiGet(keys);
-    for (const [, raw] of pairs) {
-      if (!raw) continue;
-      try {
-        const arr = JSON.parse(raw) as { done?: boolean }[];
-        if (Array.isArray(arr)) {
-          total += arr.length;
-          done += arr.filter((t) => t.done).length;
-        }
-      } catch {
-        // skip
-      }
-    }
-  }
-  return { totalDone: done, totalTasks: total, rate: total > 0 ? Math.round((done / total) * 100) : 0 };
-}
