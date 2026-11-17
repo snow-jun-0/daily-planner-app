@@ -149,6 +149,18 @@ export async function saveCategories(cats: Category[]): Promise<void> {
   await setItem(CAT_KEY, cats);
 }
 
+/** 카테고리 색 팔레트 */
+export const CATEGORY_COLORS = [
+  '#4C6EF5',
+  '#2F9E44',
+  '#E8590C',
+  '#9C36B5',
+  '#1098AD',
+  '#E03131',
+  '#F08C00',
+  '#D6599B',
+];
+
 function newCatId(): string {
   return `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }

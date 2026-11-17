@@ -22,6 +22,12 @@ export function addDays(dateKey: string, delta: number): string {
   return toDateKey(date);
 }
 
+/** dateKey가 속한 주(월~일)의 날짜 키 7개 */
+export function weekKeys(dateKey: string): string[] {
+  const monday = addDays(dateKey, -((parseDateKey(dateKey).getDay() + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}
+
 const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
 const WEEKDAYS_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 

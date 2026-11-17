@@ -1,14 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Modal,
-  PanResponder,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { FocusSheet, type PlanBlock } from '@/components/planner/focus-sheet';
 import { PlanSheet } from '@/components/planner/plan-sheet';
@@ -23,7 +15,6 @@ import {
   CELL_COUNT,
   CELL_MIN,
   COLS,
-  createCategory,
   dateToCellIndex,
   FOCUS_CATEGORY,
   loadCategories,
@@ -31,7 +22,6 @@ import {
   plannedBlockAt,
   ROWS,
   START_HOUR,
-  saveCategories,
   subscribeTimetable,
   totalActualMin,
   totalPlannedMin,
@@ -42,16 +32,6 @@ import {
 } from '@/lib/timetable';
 
 const CELL_H = 26;
-const PALETTE = [
-  '#4C6EF5',
-  '#2F9E44',
-  '#E8590C',
-  '#9C36B5',
-  '#1098AD',
-  '#E03131',
-  '#F08C00',
-  '#5C7CFA',
-];
 
 function fmtTotal(min: number): string {
   const h = Math.floor(min / 60);
@@ -93,7 +73,6 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
   const [cats, setCats] = useState<Category[]>([FOCUS_CATEGORY]);
   const [activeCat, setActiveCat] = useState<SubjectId>(FOCUS_CATEGORY.id);
   const [erase, setErase] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
   /** 집중 시트: undefined=닫힘, null=바로 집중, 블록=계획 칸 탭 */
   const [sheet, setSheet] = useState<PlanBlock | null | undefined>(undefined);
   const [editing, setEditing] = useState<{ block: PlanBlock; isNew: boolean } | null>(null);
@@ -138,9 +117,12 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
     };
   }, [dateKey]);
 
-  useEffect(() => {
-    void loadCategories().then(setCats);
-  }, []);
+  // 카테고리 화면(G9)에서 돌아오면 다시 읽는다
+  useFocusEffect(
+    useCallback(() => {
+      void loadCategories().then(setCats);
+    }, []),
+  );
 
   const catMap = useMemo(
     () => Object.fromEntries(cats.map((c) => [c.id, c])) as Record<SubjectId, Category>,
@@ -234,13 +216,6 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
       ),
     }));
     setSheet(undefined);
-  }
-
-  function addCategory(name: string) {
-    const color = PALETTE[cats.length % PALETTE.length];
-    const next = [...cats, createCategory(name || `과목 ${cats.length}`, color)];
-    setCats(next);
-    void saveCategories(next);
   }
 
   if (!day) {
@@ -338,8 +313,8 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
             </Pressable>
           );
         })}
-        <Pressable style={styles.catChip} onPress={() => setAddOpen(true)}>
-          <Text style={styles.catName}>+ 과목</Text>
+        <Pressable style={styles.catChip} onPress={() => router.push('/categories' as never)}>
+          <Text style={styles.catName}>+ 과목 관리</Text>
         </Pressable>
         <Pressable
           style={[
@@ -486,61 +461,7 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
         />
       ) : null}
 
-      <AddCategoryModal
-        visible={addOpen}
-        theme={theme}
-        onClose={() => setAddOpen(false)}
-        onAdd={(name) => {
-          addCategory(name);
-          setAddOpen(false);
-        }}
-      />
     </View>
-  );
-}
-
-function AddCategoryModal({
-  visible,
-  theme,
-  onClose,
-  onAdd,
-}: {
-  visible: boolean;
-  theme: AppTheme;
-  onClose: () => void;
-  onAdd: (name: string) => void;
-}) {
-  const [name, setName] = useState('');
-  const styles = useMemo(() => makeStyles(theme), [theme]);
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalBg} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={() => {}}>
-          <Text style={styles.modalTitle}>과목 추가</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="예: 자료구조"
-            placeholderTextColor={theme.textTertiary}
-            style={styles.modalInput}
-            autoFocus
-          />
-          <View style={styles.modalBtns}>
-            <Pressable style={styles.modalCancel} onPress={onClose}>
-              <Text style={styles.modalCancelText}>취소</Text>
-            </Pressable>
-            <Pressable
-              style={styles.modalOk}
-              onPress={() => {
-                onAdd(name.trim());
-                setName('');
-              }}>
-              <Text style={styles.modalOkText}>추가</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
 
@@ -644,31 +565,4 @@ const makeStyles = (theme: AppTheme) =>
     },
     focusBtnText: { ...PlannerType.bodyMedium, color: theme.onAccent },
     skeleton: { height: 400, borderRadius: PlannerRadius.md, backgroundColor: theme.surface },
-    modalBg: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.4)',
-      justifyContent: 'center',
-      padding: 32,
-    },
-    modalCard: { backgroundColor: theme.card, borderRadius: PlannerRadius.card, padding: 20, gap: 14 },
-    modalTitle: { ...PlannerType.titleS, color: theme.ink },
-    modalInput: {
-      borderWidth: 1,
-      borderColor: theme.line,
-      borderRadius: PlannerRadius.sm,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      color: theme.ink,
-      ...PlannerType.body,
-    },
-    modalBtns: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
-    modalCancel: { paddingVertical: 10, paddingHorizontal: 16 },
-    modalCancelText: { ...PlannerType.bodyMedium, color: theme.textSecondary },
-    modalOk: {
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: PlannerRadius.sm,
-      backgroundColor: theme.accent,
-    },
-    modalOkText: { ...PlannerType.bodyMedium, color: theme.onAccent },
   });
