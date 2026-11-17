@@ -4,10 +4,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerType } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
+import { BLOCKS_PER_CELL, liveFillRange } from '@/lib/live-fill';
+import * as pomodoro from '@/lib/pomodoro';
 import {
   COLS,
+  dateToCellIndex,
   FOCUS_CATEGORY,
   START_HOUR,
+  timetableDateKey,
   type Category,
   type Cell,
   type DayTimetable,
@@ -33,6 +37,46 @@ export function cellColor(
   return theme.surface;
 }
 
+export type LiveFill = { dateKey: string; idx: number; from: number; done: number; color: string };
+
+/** 집중 중 '지금 칸'의 1분 블록 채움 상태 (now는 useNow()로 받아 매초 갱신) */
+export function liveFillAt(now: number, catMap: Record<SubjectId, Category>): LiveFill | null {
+  const start = pomodoro.getLiveFillStart();
+  if (start == null) return null;
+  const d = new Date(now);
+  const idx = dateToCellIndex(d);
+  if (idx < 0) return null;
+  const subject = pomodoro.getState().focusSubject;
+  return {
+    dateKey: timetableDateKey(d),
+    idx,
+    ...liveFillRange(start, now),
+    color: catMap[subject]?.color ?? FOCUS_CATEGORY.color,
+  };
+}
+
+/** 칸 위에 1분 블록 10개: [from, done) 채움, done은 지금 채우는 중(연하게) */
+export function LiveFillBlocks({ live }: { live: LiveFill }) {
+  return (
+    <View style={[StyleSheet.absoluteFill, { flexDirection: 'row' }]} pointerEvents="none">
+      {Array.from({ length: BLOCKS_PER_CELL }).map((_, b) => (
+        <View
+          key={b}
+          style={{
+            flex: 1,
+            backgroundColor:
+              b >= live.from && b < live.done
+                ? live.color
+                : b === live.done
+                  ? withAlpha(live.color, 0.35)
+                  : 'transparent',
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 type Props = {
   day: DayTimetable;
   catMap: Record<SubjectId, Category>;
@@ -41,10 +85,12 @@ type Props = {
   /** 지금 채우는 칸 — 빨간 테두리로 강조 */
   nowIdx?: number;
   showColHeader?: boolean;
+  /** 집중 중 진행 칸 (useLiveFill) */
+  live?: LiveFill | null;
 };
 
 /** 격자 일부(몇 행)만 보여주는 읽기 전용 미니 격자 */
-export function MiniGrid({ day, catMap, rows, nowIdx = -1, showColHeader = true }: Props) {
+export function MiniGrid({ day, catMap, rows, nowIdx = -1, showColHeader = true, live }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
@@ -74,8 +120,9 @@ export function MiniGrid({ day, catMap, rows, nowIdx = -1, showColHeader = true 
                   styles.cell,
                   { backgroundColor: cellColor(day.cells[idx] ?? {}, catMap, theme) },
                   idx === nowIdx && styles.cellNow,
-                ]}
-              />
+                ]}>
+                {live?.idx === idx && !day.cells[idx]?.actual ? <LiveFillBlocks live={live} /> : null}
+              </View>
             );
           })}
         </View>
@@ -98,6 +145,6 @@ const makeStyles = (theme: AppTheme) =>
       color: theme.textTertiary,
       fontWeight: '700',
     },
-    cell: { flex: 1, height: 22, borderRadius: 4 },
+    cell: { flex: 1, height: 22, borderRadius: 4, overflow: 'hidden' },
     cellNow: { borderWidth: 1.5, borderColor: theme.red },
   });

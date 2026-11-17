@@ -12,7 +12,8 @@ import { TodoCard } from '@/components/planner/todo-card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import type { AppTheme } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
-import { addDays, formatHeaderLabel, formatMonthDay, todayKey } from '@/lib/date';
+import { addDays, formatHeaderLabel, formatMonthDay } from '@/lib/date';
+import { timetableDateKey } from '@/lib/timetable';
 import { createEvent, loadEvents, saveEvents, type Event, type EventColor } from '@/lib/events';
 import { loadMemo, saveMemo } from '@/lib/memos';
 import { useAuthSession } from '@/lib/auth';
@@ -28,7 +29,8 @@ import { createTask, loadTasks, saveTasks, type Task, type TaskPriority } from '
 export default function DailyScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const [viewDate, setViewDate] = useState(todayKey());
+  // '오늘' = 타임테이블 하루(06시~익일 02시). 00~05시엔 아직 어제 날짜를 오늘로 본다
+  const [viewDate, setViewDate] = useState(timetableDateKey);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [memo, setMemo] = useState('');
@@ -38,7 +40,7 @@ export default function DailyScreen() {
   const reverseSyncedFor = useRef<string | null>(null);
   const lastResyncAt = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
-  const isToday = viewDate === todayKey();
+  const isToday = viewDate === timetableDateKey();
   const doneCount = tasks.filter((t) => t.done).length;
   const progress = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
 
@@ -194,7 +196,7 @@ export default function DailyScreen() {
   }
 
   function handleToday() {
-    setViewDate(todayKey());
+    setViewDate(timetableDateKey());
   }
 
   return (

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FocusSheet } from '@/components/planner/focus-sheet';
-import { MiniGrid } from '@/components/planner/mini-grid';
+import { liveFillAt, MiniGrid } from '@/components/planner/mini-grid';
 import { OverrunWarning } from '@/components/planner/overrun-warning';
 import { TimeTimerDial } from '@/components/planner/time-timer-dial';
 import { PlannerCard } from '@/components/planner/planner-card';
@@ -13,6 +13,7 @@ import { PlannerScreen } from '@/components/planner/planner-screen';
 import { PlannerRadius, PlannerSerif, PlannerType, Spacing } from '@/constants/theme';
 import type { AppTheme } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
+import { useNow } from '@/hooks/use-now';
 import { enterFocusMode, exitFocusMode } from '@/lib/focus-mode';
 import * as pomodoro from '@/lib/pomodoro';
 import { requestNotifyPermission } from '@/lib/notify';
@@ -93,7 +94,8 @@ export default function TimerScreen() {
   );
 
   // 오늘 격자 — 타이머가 칸을 채울 때마다 다시 읽는다
-  const dateKey = timetableDateKey();
+  const nowMs = useNow();
+  const dateKey = timetableDateKey(new Date(nowMs));
   useEffect(() => {
     let alive = true;
     const load = () => void loadTimetable(dateKey).then((d) => alive && setDay(d));
@@ -109,9 +111,10 @@ export default function TimerScreen() {
     () => Object.fromEntries(cats.map((c) => [c.id, c])) as Record<SubjectId, Category>,
     [cats],
   );
+  const live = liveFillAt(nowMs, catMap);
   const subject = catMap[focusSubject] ?? FOCUS_CATEGORY;
   const noSubject = subject.id === FOCUS_CATEGORY.id;
-  const nowIdx = dateToCellIndex(new Date());
+  const nowIdx = dateToCellIndex(new Date(nowMs));
   const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
   const gridRows =
     nowRow < 0 ? [] : [nowRow - 1, nowRow, nowRow + 1].filter((r) => r >= 0 && r < ROWS);
@@ -139,7 +142,7 @@ export default function TimerScreen() {
   const isOverrun = status === 'overrun';
   const isIdle = status === 'idle';
   const isFocusRun = isRunning && phase === 'focus';
-  const now = new Date();
+  const now = new Date(nowMs);
   const nowHM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const statusLabel =
     status === 'overrun'
@@ -250,7 +253,13 @@ export default function TimerScreen() {
             </Text>
           </View>
           {gridRows.length ? (
-            <MiniGrid day={day} catMap={catMap} rows={gridRows} nowIdx={nowIdx} />
+            <MiniGrid
+              day={day}
+              catMap={catMap}
+              rows={gridRows}
+              nowIdx={nowIdx}
+              live={live?.dateKey === dateKey ? live : null}
+            />
           ) : null}
         </PlannerCard>
       ) : null}

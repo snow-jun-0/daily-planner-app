@@ -2,11 +2,11 @@ import * as Haptics from 'expo-haptics';
 
 import { todayKey } from './date';
 import { cancelOverrunNags, notifyPhaseEnd, scheduleOverrunNags, startRepeatingAlarm } from './notify';
+import { cellStartMs, completedCellTimes } from './live-fill';
 import { getPrefs } from './settings';
 import { recordBreakOverrun, recordFocusSession } from './stats';
 import { getItem, setItem } from './storage';
 import {
-  CELL_MIN,
   dateToCellIndex,
   FOCUS_CATEGORY,
   timetableDateKey,
@@ -106,14 +106,11 @@ const filled = new Set<string>();
 function fillActual(until: number): void {
   if (fillFrom == null) return;
   // 지금 진행 중인 칸(아직 10분이 안 찬 칸)은 저장하지 않는다 — 격자의 비율 오버레이가 담당한다.
-  const d0 = new Date(until);
-  d0.setMinutes(d0.getMinutes() - (d0.getMinutes() % CELL_MIN), 0, 0);
-  const cutoff = d0.getTime(); // 현재 칸의 시작 시각 = 완료된 칸까지의 경계
+  const cutoff = cellStartMs(until); // 현재 칸의 시작 시각 = 완료된 칸까지의 경계
   if (cutoff <= fillFrom) return; // 아직 한 칸도 완료되지 않음
   const firstFill = filled.size === 0;
   const byDate = new Map<string, number[]>();
-  // 칸 크기 간격으로 걸으므로 백그라운드였던 구간도 빠짐없이 채운다
-  for (let t = fillFrom; ; t = Math.min(t + CELL_MIN * 60_000, cutoff)) {
+  for (const t of completedCellTimes(fillFrom, cutoff)) {
     const d = new Date(t);
     const idx = dateToCellIndex(d);
     const dk = timetableDateKey(d);
@@ -121,7 +118,6 @@ function fillActual(until: number): void {
       filled.add(`${dk}:${idx}`);
       byDate.set(dk, [...(byDate.get(dk) ?? []), idx]);
     }
-    if (t >= cutoff) break;
   }
   fillFrom = cutoff;
   // 시작 직후 첫 칸 말고, 새 칸으로 넘어갈 때만 진동
@@ -137,6 +133,14 @@ function fillActual(until: number): void {
       return { ...day, cells };
     });
   });
+}
+
+/**
+ * 진행 중 칸을 채우기 시작한 시각 (집중 실행 중 아니면 null).
+ * 완료된 칸은 저장되며 칸 경계로 당겨지므로, 지금 칸 안에서 '세션이 이 칸에 들어온 시각'이 된다.
+ */
+export function getLiveFillStart(): number | null {
+  return state.status === 'running' && state.phase === 'focus' ? fillFrom : null;
 }
 
 /** 실행 중 구간을 마저 채우고 채우기를 멈춘다 */
