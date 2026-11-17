@@ -107,13 +107,15 @@ export function TimetableGrid({
   const [mode, setMode] = useState<'day' | 'week'>('day');
 
   const dayRef = useRef<DayTimetable | null>(null);
-  const gridW = useRef(0);
+  const gridBox = useRef({ x: 0, y: 0, w: 0 });
+  const gridRef = useRef<View>(null);
   const painted = useRef<Set<number>>(new Set());
   const activeCatRef = useRef(activeCat);
   const eraseRef = useRef(erase);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapIdx = useRef(-1); // 계획 칸에서 시작한 터치 — 움직이지 않고 떼면 시트를 연다
   const moved = useRef(false);
+  const strokeErase = useRef(false); // 이번 드래그가 지우기 획인지
   const prefsRef = useRef(prefs);
   /** 계획 칸 탭 처리 — 최신 props/설정을 쓰도록 매 렌더 갱신 */
   const onTapPlanned = useRef<(block: PlanBlock) => void>(() => {});
@@ -205,18 +207,24 @@ export function TimetableGrid({
     const cells = d.cells.slice();
     for (const i of targets) {
       painted.current.add(i);
-      cells[i] = eraseRef.current
+      cells[i] = eraseRef.current || strokeErase.current
         ? { ...cells[i], planned: undefined }
         : { ...cells[i], planned: activeCatRef.current };
     }
     persist({ ...d, cells });
   }
 
-  function indexAt(x: number, y: number): number {
-    const w = gridW.current;
+  function measureGrid() {
+    gridRef.current?.measureInWindow((x, y, w) => {
+      gridBox.current = { x, y, w };
+    });
+  }
+
+  function indexAt(pageX: number, pageY: number): number {
+    const { x, y, w } = gridBox.current;
     if (!w) return -1;
-    const col = Math.floor(x / (w / COLS));
-    const row = Math.floor(y / CELL_H);
+    const col = Math.floor((pageX - x) / (w / COLS));
+    const row = Math.floor((pageY - y) / CELL_H);
     if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return -1;
     return row * COLS + col;
   }
@@ -225,17 +233,21 @@ export function TimetableGrid({
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: (e) => {
+        measureGrid();
         painted.current.clear();
         moved.current = false;
-        const idx = indexAt(e.nativeEvent.locationX, e.nativeEvent.locationY);
+        const idx = indexAt(e.nativeEvent.pageX, e.nativeEvent.pageY);
         const planned = idx >= 0 && dayRef.current?.cells[idx]?.planned;
-        // 계획 칸에서 시작하면 칠하기를 미룬다 (탭이면 시트, 드래그면 칠하기)
+        // 이미 칠해진 칸에서 드래그를 시작하면 이 획은 '지우기'
+        strokeErase.current = !!planned;
+        // 계획 칸에서 시작하면 칠하기를 미룬다 (탭이면 시트, 드래그면 지우기)
         tapIdx.current = planned && !eraseRef.current ? idx : -1;
         if (tapIdx.current < 0) paintIndex(idx);
       },
       onPanResponderMove: (e) => {
-        const idx = indexAt(e.nativeEvent.locationX, e.nativeEvent.locationY);
+        const idx = indexAt(e.nativeEvent.pageX, e.nativeEvent.pageY);
         if (idx < 0) return;
         if (tapIdx.current >= 0 && idx !== tapIdx.current && !moved.current) {
           moved.current = true;
@@ -548,8 +560,9 @@ export function TimetableGrid({
           </Pressable>
         ) : null}
         <View
+          ref={gridRef}
           style={styles.grid}
-          onLayout={(e) => (gridW.current = e.nativeEvent.layout.width)}
+          onLayout={measureGrid}
           {...pan.panHandlers}>
           {Array.from({ length: ROWS }).map((_, r) => (
             <View key={r} style={styles.gridRow}>
