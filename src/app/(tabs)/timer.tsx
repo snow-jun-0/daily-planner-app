@@ -6,6 +6,7 @@ import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-nat
 
 import { FocusSheet } from '@/components/planner/focus-sheet';
 import { MiniGrid } from '@/components/planner/mini-grid';
+import { OverrunWarning } from '@/components/planner/overrun-warning';
 import { TimeTimerDial } from '@/components/planner/time-timer-dial';
 import { PlannerCard } from '@/components/planner/planner-card';
 import { PlannerScreen } from '@/components/planner/planner-screen';
@@ -202,7 +203,7 @@ export default function TimerScreen() {
         </Pressable>
       </PlannerCard>
 
-      <Modal visible={alarming} transparent animationType="fade" onRequestClose={pomodoro.stopAlarm}>
+      <Modal visible={alarming && !isOverrun} transparent animationType="fade" onRequestClose={pomodoro.stopAlarm}>
         <View style={styles.alarmBackdrop}>
           <View style={styles.alarmPopup}>
             <Ionicons name="alarm" size={44} color={theme.accent} />
@@ -293,6 +294,16 @@ export default function TimerScreen() {
           onIncrease={() => handleAdjustBreak(BREAK_STEP)}
         />
       </PlannerCard>
+
+      <OverrunWarning
+        visible={isOverrun}
+        overrunMs={overrunMs}
+        onResume={() => {
+          pomodoro.endBreak();
+          pomodoro.start();
+        }}
+        onQuit={pomodoro.endBreak}
+      />
 
       {day && pickerOpen ? (
         <FocusSheet
