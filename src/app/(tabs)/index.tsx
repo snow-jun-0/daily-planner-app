@@ -18,7 +18,7 @@ import { loadMemo, saveMemo } from '@/lib/memos';
 import { useAuthSession } from '@/lib/auth';
 import { getDDayCount, loadVisibleDDays } from '@/lib/dday';
 import { syncGoogleCalendar } from '@/lib/gcal';
-import { getAutoSyncCalendar } from '@/lib/settings';
+import { getAutoSyncCalendar, isOnboarded } from '@/lib/settings';
 import { consumePendingViewDate } from '@/lib/navigation';
 import { DEFAULT_TASKLIST, deleteGTask, insertGTask, setGTaskStatus } from '@/lib/gtasks';
 import { maybeRestoreOnLogin } from '@/lib/backup';
@@ -46,6 +46,13 @@ export default function DailyScreen() {
     void loadVisibleDDays().then((list) =>
       setDdays(list.map((d) => ({ label: d.title, dday: getDDayCount(d.date) }))),
     );
+  }, []);
+
+  // 첫 실행이면 온보딩으로
+  useEffect(() => {
+    void isOnboarded().then((ok) => {
+      if (!ok) router.replace('/onboarding' as never);
+    });
   }, []);
 
   // jump to whatever date the 월간 tab requested, if any

@@ -129,3 +129,14 @@ export async function resetAllData(): Promise<void> {
   );
   if (mine.length) await AsyncStorage.multiRemove(mine);
 }
+
+const ONBOARDED_KEY = 'settings:onboarded';
+
+/** 온보딩을 봤는지. 과목을 이미 만든 기존 사용자도 본 것으로 친다 */
+export async function isOnboarded(): Promise<boolean> {
+  if (await getItem<boolean>(ONBOARDED_KEY)) return true;
+  return (await AsyncStorage.getItem('categories')) != null;
+}
+export async function setOnboarded(): Promise<void> {
+  await setItem(ONBOARDED_KEY, true);
+}
