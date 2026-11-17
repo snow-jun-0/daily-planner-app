@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { FocusSheet, type PlanBlock } from '@/components/planner/focus-sheet';
+import { PlanSheet } from '@/components/planner/plan-sheet';
 import { cellColor, withAlpha } from '@/components/planner/mini-grid';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType } from '@/constants/theme';
@@ -19,6 +20,8 @@ import { startFocus } from '@/lib/pomodoro';
 import {
   achievementRate,
   actualByCategory,
+  CELL_COUNT,
+  CELL_MIN,
   COLS,
   createCategory,
   dateToCellIndex,
@@ -67,9 +70,22 @@ function hourLabel(row: number): string {
   return String(h).padStart(2, '0');
 }
 
-type Props = { dateKey: string; isToday: boolean; onStartFocus?: () => void };
+/** 자정 기준 분 → 격자(06:00=0) 기준 분. 00~05시는 전날 새벽 연장 */
+function toGridMin(m: number): number {
+  return (m < START_HOUR * 60 ? m + 1440 : m) - START_HOUR * 60;
+}
 
-export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
+type LaneEvent = { id: string; title: string; start: number; end: number };
+
+type Props = {
+  dateKey: string;
+  isToday: boolean;
+  onStartFocus?: () => void;
+  /** 일정 레인 (수업·약속) — 자정 기준 분 */
+  events?: LaneEvent[];
+};
+
+export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -80,6 +96,8 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   /** 집중 시트: undefined=닫힘, null=바로 집중, 블록=계획 칸 탭 */
   const [sheet, setSheet] = useState<PlanBlock | null | undefined>(undefined);
+  const [editing, setEditing] = useState<{ block: PlanBlock; isNew: boolean } | null>(null);
+  const [laneOpen, setLaneOpen] = useState(true);
 
   const dayRef = useRef<DayTimetable | null>(null);
   const gridW = useRef(0);
@@ -198,10 +216,13 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
     }),
   ).current;
 
-  function setPlanned(block: PlanBlock, planned: SubjectId | undefined) {
+  function setPlanned(block: PlanBlock, planned: SubjectId | undefined, replaces?: PlanBlock) {
     const d = dayRef.current;
     if (!d) return;
-    const cells = d.cells.map((c, i) => (i >= block.start && i <= block.end ? { ...c, planned } : c));
+    const inside = (b: PlanBlock | undefined, i: number) => b != null && i >= b.start && i <= b.end;
+    const cells = d.cells.map((c, i) =>
+      inside(block, i) ? { ...c, planned } : inside(replaces, i) ? { ...c, planned: undefined } : c,
+    );
     persist({ ...d, cells });
   }
 
@@ -238,6 +259,27 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
   const nowIdx = isToday ? dateToCellIndex(new Date()) : -1;
   const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
 
+  function openNewPlan() {
+    const start = Math.max(0, nowIdx);
+    setEditing({
+      block: { start, end: Math.min(start + 5, CELL_COUNT - 1), subject: activeCat },
+      isNew: true,
+    });
+  }
+
+  // 일정 레인: 격자 범위로 자른 일정들 + 일정이 걸친 칸
+  const lane = events
+    .map((e) => ({
+      ...e,
+      top: Math.max(0, toGridMin(e.start)),
+      bottom: Math.min(ROWS * 60, toGridMin(e.end <= e.start ? e.end + 1440 : e.end)),
+    }))
+    .filter((e) => e.bottom > e.top);
+  const eventCell = new Set<number>();
+  for (const e of lane)
+    for (let i = Math.floor(e.top / CELL_MIN); i < Math.ceil(e.bottom / CELL_MIN); i++)
+      eventCell.add(i);
+
 
   return (
     <View style={styles.card}>
@@ -272,7 +314,9 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
 
       <View style={styles.titleRow}>
         <Text style={styles.sectionTitle}>타임테이블</Text>
-        <Text style={styles.hint}>드래그로 계획 · 계획 칸 탭으로 집중</Text>
+        <Pressable style={styles.addPlan} onPress={openNewPlan} hitSlop={6}>
+          <Text style={styles.addPlanText}>+ 계획</Text>
+        </Pressable>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
@@ -307,6 +351,22 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
         </Pressable>
       </ScrollView>
 
+      <Text style={styles.hint}>드래그로 계획 칠하기 · 계획 칸 탭하면 집중</Text>
+
+      <View style={styles.colHeadRow}>
+        <View style={styles.axis} />
+        {lane.length ? (
+          <Text style={[styles.colHead, laneOpen ? styles.laneOpen : styles.laneClosed]}>
+            {laneOpen ? '일정' : ''}
+          </Text>
+        ) : null}
+        {Array.from({ length: COLS }).map((_, c) => (
+          <Text key={c} style={[styles.colHead, { flex: 1 }]}>
+            {(c + 1) * 10}
+          </Text>
+        ))}
+      </View>
+
       <View style={styles.gridWrap}>
         <View style={styles.axis}>
           {Array.from({ length: ROWS }).map((_, r) => (
@@ -317,6 +377,27 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
             </View>
           ))}
         </View>
+        {lane.length ? (
+          <Pressable
+            style={laneOpen ? styles.laneOpen : styles.laneClosed}
+            onPress={() => setLaneOpen((v) => !v)}
+            accessibilityLabel={laneOpen ? '일정 레인 접기' : '일정 레인 펼치기'}>
+            {lane.map((e) => (
+              <View
+                key={e.id}
+                style={[
+                  styles.laneItem,
+                  { top: (e.top / 60) * CELL_H, height: ((e.bottom - e.top) / 60) * CELL_H - 2 },
+                ]}>
+                {laneOpen ? (
+                  <Text style={styles.laneText} numberOfLines={1}>
+                    {e.title}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </Pressable>
+        ) : null}
         <View
           style={styles.grid}
           onLayout={(e) => (gridW.current = e.nativeEvent.layout.width)}
@@ -326,7 +407,12 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
               {Array.from({ length: COLS }).map((_, c) => {
                 const idx = r * COLS + c;
                 return (
-                  <View key={c} style={[styles.cell, { backgroundColor: cellColor(day.cells[idx] ?? {}, catMap, theme) }]} />
+                  <View key={c} style={[styles.cell, {
+                        backgroundColor:
+                          !day.cells[idx]?.planned && !day.cells[idx]?.actual && eventCell.has(idx)
+                            ? theme.line
+                            : cellColor(day.cells[idx] ?? {}, catMap, theme),
+                      }]} />
                 );
               })}
             </View>
@@ -344,7 +430,16 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
           <View style={[styles.legendBox, { backgroundColor: theme.ink }]} />
           <Text style={styles.legendText}>실제</Text>
         </View>
+        {lane.length ? (
+          <View style={styles.legendItem}>
+            <View style={[styles.legendBox, { backgroundColor: theme.line }]} />
+            <Text style={styles.legendText}>일정 시간</Text>
+          </View>
+        ) : null}
       </View>
+      {lane.length && !laneOpen ? (
+        <Text style={styles.hint}>일정 레인을 접었어요. 왼쪽 띠를 탭하면 다시 펼쳐져요.</Text>
+      ) : null}
 
       <Pressable style={styles.focusBtn} onPress={() => setSheet(null)}>
         <Text style={styles.focusBtnText}>바로 집중 시작</Text>
@@ -363,9 +458,30 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
             onStartFocus?.();
           }}
           onRecord={recordBlock}
+          onEdit={(block) => {
+            setSheet(undefined);
+            setEditing({ block, isNew: false });
+          }}
           onClearPlan={(block) => {
             setPlanned(block, undefined);
             setSheet(undefined);
+          }}
+        />
+      ) : null}
+
+      {editing ? (
+        <PlanSheet
+          cats={cats}
+          initial={editing.block}
+          isNew={editing.isNew}
+          onClose={() => setEditing(null)}
+          onSave={(block) => {
+            setPlanned(block, block.subject, editing.isNew ? undefined : editing.block);
+            setEditing(null);
+          }}
+          onDelete={() => {
+            setPlanned(editing.block, undefined);
+            setEditing(null);
           }}
         />
       ) : null}
@@ -478,7 +594,35 @@ const makeStyles = (theme: AppTheme) =>
       borderColor: theme.line,
     },
     catName: { ...PlannerType.label, color: theme.textSecondary },
-    gridWrap: { flexDirection: 'row', marginTop: 4 },
+    addPlan: {
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+      borderRadius: PlannerRadius.chip,
+      backgroundColor: theme.surface,
+    },
+    addPlanText: { ...PlannerType.labelStrong, color: theme.ink },
+    colHeadRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    colHead: {
+      ...PlannerType.caption,
+      fontSize: 11,
+      fontWeight: '700',
+      textAlign: 'center',
+      color: theme.textTertiary,
+    },
+    laneOpen: { width: 56, marginRight: 4, position: 'relative' },
+    laneClosed: { width: 8, marginRight: 4, position: 'relative' },
+    laneItem: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.textSecondary,
+      backgroundColor: theme.card,
+      paddingLeft: 4,
+      justifyContent: 'center',
+    },
+    laneText: { ...PlannerType.caption, fontSize: 11, color: theme.ink },
+    gridWrap: { flexDirection: 'row' },
     axis: { width: 26 },
     axisCell: { height: CELL_H, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 6 },
     axisText: { ...PlannerType.caption, color: theme.textTertiary, fontSize: 11 },

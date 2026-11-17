@@ -31,6 +31,8 @@ type Props = {
   onStart: (subject: SubjectId, minutes?: number) => void;
   onRecord?: (block: PlanBlock) => void;
   onClearPlan?: (block: PlanBlock) => void;
+  /** 연필 버튼 → G8 계획 편집 */
+  onEdit?: (block: PlanBlock) => void;
 };
 
 function fmtHM(min: number): string {
@@ -51,6 +53,7 @@ export function FocusSheet({
   onStart,
   onRecord,
   onClearPlan,
+  onEdit,
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -97,6 +100,11 @@ export function FocusSheet({
                   : '집중하는 동안 지금 칸이 과목색으로 채워져요'}
               </Text>
             </View>
+            {block && onEdit ? (
+              <Pressable style={styles.editBtn} onPress={() => onEdit(block)} hitSlop={8}>
+                <Ionicons name="pencil" size={16} color={theme.ink} />
+              </Pressable>
+            ) : null}
           </View>
 
           {block ? (
@@ -192,6 +200,14 @@ const makeStyles = (theme: AppTheme) =>
       marginBottom: 6,
     },
     header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    editBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     colorBar: { width: 4, alignSelf: 'stretch', borderRadius: 2 },
     title: { ...PlannerType.titleM, color: theme.ink },
     sub: { ...PlannerType.caption, color: theme.textSecondary },

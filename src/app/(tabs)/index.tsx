@@ -218,6 +218,7 @@ export default function DailyScreen() {
           <TimetableGrid
             dateKey={viewDate}
             isToday={isToday}
+            events={events}
             onStartFocus={() => router.push('/timer' as never)}
           />
 
