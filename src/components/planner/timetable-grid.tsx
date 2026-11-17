@@ -4,6 +4,7 @@ import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 
 import { FocusSheet, type PlanBlock } from '@/components/planner/focus-sheet';
 import { PlanSheet } from '@/components/planner/plan-sheet';
+import { WeekGrid } from '@/components/planner/week-grid';
 import { cellColor, withAlpha } from '@/components/planner/mini-grid';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType } from '@/constants/theme';
@@ -63,9 +64,17 @@ type Props = {
   onStartFocus?: () => void;
   /** 일정 레인 (수업·약속) — 자정 기준 분 */
   events?: LaneEvent[];
+  /** 주간 뷰에서 날짜 탭 */
+  onSelectDate?: (dateKey: string) => void;
 };
 
-export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: Props) {
+export function TimetableGrid({
+  dateKey,
+  isToday,
+  onStartFocus,
+  events = [],
+  onSelectDate,
+}: Props) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -77,6 +86,7 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
   const [sheet, setSheet] = useState<PlanBlock | null | undefined>(undefined);
   const [editing, setEditing] = useState<{ block: PlanBlock; isNew: boolean } | null>(null);
   const [laneOpen, setLaneOpen] = useState(true);
+  const [mode, setMode] = useState<'day' | 'week'>('day');
 
   const dayRef = useRef<DayTimetable | null>(null);
   const gridW = useRef(0);
@@ -218,6 +228,40 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
     setSheet(undefined);
   }
 
+  const modeToggle = (
+    <View style={styles.toggle}>
+      {(['day', 'week'] as const).map((m) => (
+        <Pressable
+          key={m}
+          onPress={() => setMode(m)}
+          style={[styles.toggleItem, mode === m && styles.toggleItemOn]}>
+          <Text style={[styles.toggleText, mode === m && styles.toggleTextOn]}>
+            {m === 'day' ? '일' : '주'}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  if (mode === 'week') {
+    return (
+      <View style={styles.card}>
+        <View style={styles.titleRow}>
+          <Text style={styles.sectionTitle}>타임테이블</Text>
+          {modeToggle}
+        </View>
+        <WeekGrid
+          dateKey={dateKey}
+          cats={cats}
+          onSelectDate={(k) => {
+            setMode('day');
+            onSelectDate?.(k);
+          }}
+        />
+      </View>
+    );
+  }
+
   if (!day) {
     return (
       <View style={styles.card}>
@@ -289,9 +333,12 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus, events = [] }: P
 
       <View style={styles.titleRow}>
         <Text style={styles.sectionTitle}>타임테이블</Text>
-        <Pressable style={styles.addPlan} onPress={openNewPlan} hitSlop={6}>
-          <Text style={styles.addPlanText}>+ 계획</Text>
-        </Pressable>
+        <View style={styles.titleRight}>
+          <Pressable style={styles.addPlan} onPress={openNewPlan} hitSlop={6}>
+            <Text style={styles.addPlanText}>+ 계획</Text>
+          </Pressable>
+          {modeToggle}
+        </View>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
@@ -515,6 +562,17 @@ const makeStyles = (theme: AppTheme) =>
       borderColor: theme.line,
     },
     catName: { ...PlannerType.label, color: theme.textSecondary },
+    titleRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    toggle: {
+      flexDirection: 'row',
+      padding: 2,
+      borderRadius: PlannerRadius.sm,
+      backgroundColor: theme.surface,
+    },
+    toggleItem: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 6 },
+    toggleItemOn: { backgroundColor: theme.card },
+    toggleText: { ...PlannerType.labelStrong, color: theme.textTertiary },
+    toggleTextOn: { color: theme.ink },
     addPlan: {
       paddingVertical: 4,
       paddingHorizontal: 10,

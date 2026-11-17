@@ -219,6 +219,7 @@ export default function DailyScreen() {
             dateKey={viewDate}
             isToday={isToday}
             events={events}
+            onSelectDate={setViewDate}
             onStartFocus={() => router.push('/timer' as never)}
           />
 
