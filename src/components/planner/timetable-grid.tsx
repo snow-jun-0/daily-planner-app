@@ -10,9 +10,12 @@ import {
   View,
 } from 'react-native';
 
+import { FocusSheet, type PlanBlock } from '@/components/planner/focus-sheet';
+import { cellColor, withAlpha } from '@/components/planner/mini-grid';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
+import { startFocus } from '@/lib/pomodoro';
 import {
   achievementRate,
   actualByCategory,
@@ -22,14 +25,15 @@ import {
   FOCUS_CATEGORY,
   loadCategories,
   loadTimetable,
+  plannedBlockAt,
   ROWS,
   START_HOUR,
   saveCategories,
-  saveTimetable,
+  subscribeTimetable,
   totalActualMin,
   totalPlannedMin,
+  updateTimetable,
   type Category,
-  type Cell,
   type DayTimetable,
   type SubjectId,
 } from '@/lib/timetable';
@@ -46,13 +50,6 @@ const PALETTE = [
   '#5C7CFA',
 ];
 
-function withAlpha(hex: string, a: number): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
 function fmtTotal(min: number): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
@@ -81,6 +78,8 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
   const [activeCat, setActiveCat] = useState<SubjectId>(FOCUS_CATEGORY.id);
   const [erase, setErase] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  /** 집중 시트: undefined=닫힘, null=바로 집중, 블록=계획 칸 탭 */
+  const [sheet, setSheet] = useState<PlanBlock | null | undefined>(undefined);
 
   const dayRef = useRef<DayTimetable | null>(null);
   const gridW = useRef(0);
@@ -88,6 +87,8 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
   const activeCatRef = useRef(activeCat);
   const eraseRef = useRef(erase);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tapIdx = useRef(-1); // 계획 칸에서 시작한 터치 — 움직이지 않고 떼면 시트를 연다
+  const moved = useRef(false);
   activeCatRef.current = activeCat;
   eraseRef.current = erase;
 
@@ -99,8 +100,23 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
         dayRef.current = d;
       }
     });
+    // 타이머가 actual을 채우면 다시 읽는다. planned는 이 격자가 주인이라 로컬 것을 유지.
+    const unsub = subscribeTimetable((dk) => {
+      if (dk !== dateKey) return;
+      void loadTimetable(dk).then((d) => {
+        const cur = dayRef.current;
+        const next = cur
+          ? { ...d, cells: d.cells.map((c, i) => ({ ...c, planned: cur.cells[i]?.planned })) }
+          : d;
+        if (alive) {
+          setDay(next);
+          dayRef.current = next;
+        }
+      });
+    });
     return () => {
       alive = false;
+      unsub();
     };
   }, [dateKey]);
 
@@ -117,7 +133,13 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
     dayRef.current = next;
     setDay(next);
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void saveTimetable(dateKey, next), 400);
+    saveTimer.current = setTimeout(() => {
+      // 최신 저장본(타이머가 쓴 actual 포함)에 planned만 덮어쓴다
+      void updateTimetable(dateKey, (latest) => ({
+        ...latest,
+        cells: latest.cells.map((c, i) => ({ ...c, planned: next.cells[i]?.planned })),
+      }));
+    }, 400);
   }
 
   function paintIndex(idx: number) {
@@ -132,13 +154,13 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
     persist({ ...d, cells });
   }
 
-  function paintAt(x: number, y: number) {
+  function indexAt(x: number, y: number): number {
     const w = gridW.current;
-    if (!w) return;
+    if (!w) return -1;
     const col = Math.floor(x / (w / COLS));
     const row = Math.floor(y / CELL_H);
-    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
-    paintIndex(row * COLS + col);
+    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return -1;
+    return row * COLS + col;
   }
 
   const pan = useRef(
@@ -147,15 +169,51 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (e) => {
         painted.current.clear();
-        paintAt(e.nativeEvent.locationX, e.nativeEvent.locationY);
+        moved.current = false;
+        const idx = indexAt(e.nativeEvent.locationX, e.nativeEvent.locationY);
+        const planned = idx >= 0 && dayRef.current?.cells[idx]?.planned;
+        // 계획 칸에서 시작하면 칠하기를 미룬다 (탭이면 시트, 드래그면 칠하기)
+        tapIdx.current = planned && !eraseRef.current ? idx : -1;
+        if (tapIdx.current < 0) paintIndex(idx);
       },
       onPanResponderMove: (e) => {
-        paintAt(e.nativeEvent.locationX, e.nativeEvent.locationY);
+        const idx = indexAt(e.nativeEvent.locationX, e.nativeEvent.locationY);
+        if (idx < 0) return;
+        if (tapIdx.current >= 0 && idx !== tapIdx.current && !moved.current) {
+          moved.current = true;
+          paintIndex(tapIdx.current);
+        }
+        if (tapIdx.current < 0 || moved.current) paintIndex(idx);
       },
-      onPanResponderRelease: () => painted.current.clear(),
-      onPanResponderTerminate: () => painted.current.clear(),
+      onPanResponderRelease: () => {
+        painted.current.clear();
+        const d = dayRef.current;
+        if (tapIdx.current >= 0 && !moved.current && d) setSheet(plannedBlockAt(d, tapIdx.current));
+        tapIdx.current = -1;
+      },
+      onPanResponderTerminate: () => {
+        painted.current.clear();
+        tapIdx.current = -1;
+      },
     }),
   ).current;
+
+  function setPlanned(block: PlanBlock, planned: SubjectId | undefined) {
+    const d = dayRef.current;
+    if (!d) return;
+    const cells = d.cells.map((c, i) => (i >= block.start && i <= block.end ? { ...c, planned } : c));
+    persist({ ...d, cells });
+  }
+
+  function recordBlock(block: PlanBlock) {
+    void updateTimetable(dateKey, (latest) => ({
+      ...latest,
+      cells: latest.cells.map((c, i) =>
+        i >= block.start && i <= block.end ? { ...c, actual: block.subject } : c,
+      ),
+    }));
+    setSheet(undefined);
+  }
 
   function addCategory(name: string) {
     const color = PALETTE[cats.length % PALETTE.length];
@@ -180,12 +238,6 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
   const nowIdx = isToday ? dateToCellIndex(new Date()) : -1;
   const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
 
-  const cellBg = (cell: Cell): string => {
-    if (cell.actual) return catMap[cell.actual]?.color ?? FOCUS_CATEGORY.color;
-    if (cell.planned)
-      return withAlpha(catMap[cell.planned]?.color ?? FOCUS_CATEGORY.color, 0.28);
-    return theme.surface;
-  };
 
   return (
     <View style={styles.card}>
@@ -220,7 +272,7 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
 
       <View style={styles.titleRow}>
         <Text style={styles.sectionTitle}>타임테이블</Text>
-        <Text style={styles.hint}>드래그해서 계획을 칠하세요</Text>
+        <Text style={styles.hint}>드래그로 계획 · 계획 칸 탭으로 집중</Text>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
@@ -274,7 +326,7 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
               {Array.from({ length: COLS }).map((_, c) => {
                 const idx = r * COLS + c;
                 return (
-                  <View key={c} style={[styles.cell, { backgroundColor: cellBg(day.cells[idx] ?? {}) }]} />
+                  <View key={c} style={[styles.cell, { backgroundColor: cellColor(day.cells[idx] ?? {}, catMap, theme) }]} />
                 );
               })}
             </View>
@@ -294,9 +346,29 @@ export function TimetableGrid({ dateKey, isToday, onStartFocus }: Props) {
         </View>
       </View>
 
-      <Pressable style={styles.focusBtn} onPress={onStartFocus}>
+      <Pressable style={styles.focusBtn} onPress={() => setSheet(null)}>
         <Text style={styles.focusBtnText}>바로 집중 시작</Text>
       </Pressable>
+
+      {sheet !== undefined ? (
+        <FocusSheet
+          onClose={() => setSheet(undefined)}
+          day={day}
+          cats={cats}
+          block={sheet ?? null}
+          nowIdx={nowIdx}
+          onStart={(subject, minutes) => {
+            startFocus(subject, minutes);
+            setSheet(undefined);
+            onStartFocus?.();
+          }}
+          onRecord={recordBlock}
+          onClearPlan={(block) => {
+            setPlanned(block, undefined);
+            setSheet(undefined);
+          }}
+        />
+      ) : null}
 
       <AddCategoryModal
         visible={addOpen}

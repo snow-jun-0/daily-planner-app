@@ -2,6 +2,14 @@ import { todayKey } from './date';
 import { cancelOverrunNags, notifyPhaseEnd, scheduleOverrunNags, startRepeatingAlarm } from './notify';
 import { recordBreakOverrun, recordFocusSession } from './stats';
 import { getItem, setItem } from './storage';
+import {
+  CELL_MIN,
+  dateToCellIndex,
+  FOCUS_CATEGORY,
+  timetableDateKey,
+  updateTimetable,
+  type SubjectId,
+} from './timetable';
 
 export type TimerStatus = 'idle' | 'running' | 'paused' | 'overrun';
 export type TimerPhase = 'focus' | 'break';
@@ -30,6 +38,8 @@ export type PomodoroState = {
   overrunMs: number;
   /** 직전 휴식에서 1분 유예 넘긴 초과(ms) — 잔소리 표시용 */
   lastOverrunMs: number;
+  /** 집중 중 격자에 실제(actual)로 채울 과목 */
+  focusSubject: SubjectId;
 };
 
 const DEFAULT_SETTINGS: PomodoroSettings = { focusMinutes: 25, breakMinutes: 5 };
@@ -80,7 +90,58 @@ let state: PomodoroState = {
   overrunStartTime: null,
   overrunMs: 0,
   lastOverrunMs: 0,
+  focusSubject: FOCUS_CATEGORY.id,
 };
+
+// ───────── 격자 actual 채우기 ─────────
+/** 집중 실행 중 아직 격자에 반영 안 한 구간의 시작 (실행 중이 아니면 null) */
+let fillFrom: number | null = null;
+/** 이번 실행에서 이미 칠한 칸 `${date}:${idx}` — 같은 칸 재저장 방지 */
+const filled = new Set<string>();
+
+/** fillFrom ~ until 사이 칸들을 오늘 타임테이블 actual로 마킹. 새 칸이 생길 때만 저장(≈10분 1회). */
+function fillActual(until: number): void {
+  if (fillFrom == null) return;
+  const byDate = new Map<string, number[]>();
+  // 칸 크기 간격으로 걸으므로 백그라운드였던 구간도 빠짐없이 채운다
+  for (let t = fillFrom; ; t = Math.min(t + CELL_MIN * 60_000, until)) {
+    const d = new Date(t);
+    const idx = dateToCellIndex(d); // ponytail: 02~06시 집중은 버림, overflowMin 집계는 필요할 때
+    const dk = timetableDateKey(d);
+    if (idx >= 0 && !filled.has(`${dk}:${idx}`)) {
+      filled.add(`${dk}:${idx}`);
+      byDate.set(dk, [...(byDate.get(dk) ?? []), idx]);
+    }
+    if (t >= until) break;
+  }
+  fillFrom = until;
+  const subject = state.focusSubject;
+  byDate.forEach((idxs, dk) => {
+    void updateTimetable(dk, (day) => {
+      const cells = day.cells.slice();
+      for (const i of idxs) cells[i] = { ...cells[i], actual: subject };
+      return { ...day, cells };
+    });
+  });
+}
+
+/** 실행 중 구간을 마저 채우고 채우기를 멈춘다 */
+function stopFilling(until = Date.now()): void {
+  fillActual(until);
+  fillFrom = null;
+}
+
+/** 집중에 쓸 과목 지정 (집중 중이면 지금 칸부터 새 과목으로 덮어씀) */
+export function setFocusSubject(id: SubjectId): void {
+  if (fillFrom != null) {
+    fillActual(Date.now());
+    filled.clear();
+    fillFrom = Date.now();
+  }
+  state = { ...state, focusSubject: id };
+  if (fillFrom != null) fillActual(Date.now());
+  emit();
+}
 
 let initialized = false;
 const listeners = new Set<() => void>();
@@ -150,17 +211,47 @@ export function start(): void {
     remainingMs: remaining,
     alarming: false,
   };
+  if (state.phase === 'focus') {
+    filled.clear();
+    fillFrom = Date.now();
+    fillActual(fillFrom);
+  }
   emit();
+}
+
+/** 과목을 정해 집중 시작. minutes를 주면 다이얼(집중 시간)도 그 값으로 맞춘다. */
+export function startFocus(subject: SubjectId, minutes?: number): void {
+  if (state.status === 'running' && state.phase === 'focus') {
+    setFocusSubject(subject);
+    return;
+  }
+  stopAlarmInternal();
+  void cancelOverrunNags();
+  state = {
+    ...state,
+    focusSubject: subject,
+    phase: 'focus',
+    status: 'idle',
+    endTime: null,
+    remainingMs: getPhaseDurationMs('focus', state.settings),
+    alarming: false,
+    overrunStartTime: null,
+    overrunMs: 0,
+  };
+  if (minutes) void setFocusMinutes(Math.max(1, Math.min(60, minutes)));
+  start();
 }
 
 export function pause(): void {
   if (state.status !== 'running' || state.endTime == null) return;
+  stopFilling();
   const remaining = Math.max(0, state.endTime - Date.now());
   state = { ...state, status: 'paused', endTime: null, remainingMs: remaining };
   emit();
 }
 
 export function reset(): void {
+  stopFilling();
   stopAlarmInternal();
   void cancelOverrunNags();
   state = {
@@ -179,6 +270,7 @@ export function reset(): void {
 export function skip(): void {
   rolloverSessionsIfNewDay();
   const nextPhase: TimerPhase = state.phase === 'focus' ? 'break' : 'focus';
+  stopFilling();
   stopAlarmInternal();
   void cancelOverrunNags();
   state = {
@@ -242,8 +334,10 @@ export function tick(): void {
   if (state.status !== 'running' || state.endTime == null) return;
   const remaining = state.endTime - Date.now();
   if (remaining <= 0) {
+    stopFilling(state.endTime);
     completePhase();
   } else {
+    fillActual(Date.now());
     state = { ...state, remainingMs: remaining };
     emit();
   }

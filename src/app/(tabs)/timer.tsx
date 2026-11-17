@@ -1,17 +1,34 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { FocusSheet } from '@/components/planner/focus-sheet';
+import { MiniGrid } from '@/components/planner/mini-grid';
 import { TimeTimerDial } from '@/components/planner/time-timer-dial';
 import { PlannerCard } from '@/components/planner/planner-card';
 import { PlannerScreen } from '@/components/planner/planner-screen';
-import { PlannerRadius, PlannerSerif, Spacing } from '@/constants/theme';
+import { PlannerRadius, PlannerSerif, PlannerType, Spacing } from '@/constants/theme';
 import type { AppTheme } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
 import { enterFocusMode, exitFocusMode } from '@/lib/focus-mode';
 import * as pomodoro from '@/lib/pomodoro';
 import { requestNotifyPermission } from '@/lib/notify';
+import {
+  cellLabel,
+  COLS,
+  dateToCellIndex,
+  FOCUS_CATEGORY,
+  loadCategories,
+  loadTimetable,
+  ROWS,
+  subscribeTimetable,
+  timetableDateKey,
+  type Category,
+  type DayTimetable,
+  type SubjectId,
+} from '@/lib/timetable';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
@@ -61,8 +78,42 @@ export default function TimerScreen() {
     }
   }, [state.status]);
 
-  const { status, phase, remainingMs, settings, alarming, overrunMs } = state;
+  const { status, phase, remainingMs, settings, alarming, overrunMs, focusSubject, sessionsDone } =
+    state;
   const [focusMode, setFocusMode] = useState(false);
+  const [cats, setCats] = useState<Category[]>([FOCUS_CATEGORY]);
+  const [day, setDay] = useState<DayTimetable | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadCategories().then(setCats);
+    }, []),
+  );
+
+  // 오늘 격자 — 타이머가 칸을 채울 때마다 다시 읽는다
+  const dateKey = timetableDateKey();
+  useEffect(() => {
+    let alive = true;
+    const load = () => void loadTimetable(dateKey).then((d) => alive && setDay(d));
+    load();
+    const unsub = subscribeTimetable((dk) => dk === dateKey && load());
+    return () => {
+      alive = false;
+      unsub();
+    };
+  }, [dateKey]);
+
+  const catMap = useMemo(
+    () => Object.fromEntries(cats.map((c) => [c.id, c])) as Record<SubjectId, Category>,
+    [cats],
+  );
+  const subject = catMap[focusSubject] ?? FOCUS_CATEGORY;
+  const noSubject = subject.id === FOCUS_CATEGORY.id;
+  const nowIdx = dateToCellIndex(new Date());
+  const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
+  const gridRows =
+    nowRow < 0 ? [] : [nowRow - 1, nowRow, nowRow + 1].filter((r) => r >= 0 && r < ROWS);
 
   const toggleFocus = () => {
     if (focusMode) {
@@ -85,9 +136,13 @@ export default function TimerScreen() {
   const isRunning = status === 'running';
 
   const isOverrun = status === 'overrun';
+  const isIdle = status === 'idle';
+  const isFocusRun = isRunning && phase === 'focus';
+  const now = new Date();
+  const nowHM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const statusLabel =
     status === 'overrun'
-      ? '휴식 초과 중 🫠'
+      ? '휴식 초과 🫠'
       : status === 'paused'
         ? '일시정지'
         : phase === 'focus'
@@ -109,9 +164,15 @@ export default function TimerScreen() {
   return (
     <PlannerScreen contentStyle={styles.content}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>뽀모도로</Text>
+        <Text style={styles.title}>집중</Text>
 
-        <Pressable style={styles.lockBtn} hitSlop={8} onPress={toggleFocus}>
+        <View style={styles.headerRight}>
+          {isIdle ? null : (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{statusLabel}</Text>
+            </View>
+          )}
+          <Pressable style={styles.lockBtn} hitSlop={8} onPress={toggleFocus}>
           <Ionicons
             name={focusMode ? 'lock-open-outline' : 'lock-closed-outline'}
             size={14}
@@ -120,12 +181,26 @@ export default function TimerScreen() {
           <Text style={[styles.lockBtnText, focusMode ? { color: theme.accent } : null]}>
             {focusMode ? '집중 해제' : '화면 잠금'}
           </Text>
-        </Pressable>
+          </Pressable>
+        </View>
       </View>
 
-      <View style={styles.statusPill}>
-        <Text style={styles.statusPillText}>{statusLabel}</Text>
-      </View>
+      <PlannerCard style={styles.subjectCard}>
+        <View style={[styles.subjectBar, { backgroundColor: subject.color }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.subjectName}>{noSubject ? '과목 없이 집중' : subject.name}</Text>
+          <Text style={styles.subjectSub}>
+            {isIdle
+              ? noSubject
+                ? '뽀모도로 · 기본색으로 채워져요'
+                : '뽀모도로 · 과목색으로 채워져요'
+              : `뽀모도로 ${Math.min(sessionsDone + 1, SESSIONS_GOAL)} / ${SESSIONS_GOAL} 세션`}
+          </Text>
+        </View>
+        <Pressable hitSlop={8} onPress={() => setPickerOpen(true)}>
+          <Text style={styles.subjectLink}>{noSubject ? '과목 선택' : '과목 변경'}</Text>
+        </Pressable>
+      </PlannerCard>
 
       <Modal visible={alarming} transparent animationType="fade" onRequestClose={pomodoro.stopAlarm}>
         <View style={styles.alarmBackdrop}>
@@ -153,14 +228,42 @@ export default function TimerScreen() {
         <Text style={[styles.timeText, isOverrun ? { color: theme.red } : null]}>
           {isOverrun ? `+${formatClock(overrunMs)}` : formatClock(remainingMs)}
         </Text>
+        <Text style={styles.dialCaption}>{isIdle ? '돌려서 설정' : '남은 시간'}</Text>
       </TimeTimerDial>
+      <Text style={styles.dialHint}>
+        {isIdle && phase === 'focus'
+          ? '빨간 다이얼을 드래그해 시간을 정하세요'
+          : '집중하는 동안에만 칸이 채워져요'}
+      </Text>
+
+      {day ? (
+        <PlannerCard style={styles.fillCard}>
+          <View style={styles.fillHead}>
+            <Text style={styles.fillTitle}>지금 채우는 칸</Text>
+            <Text style={styles.fillSub}>
+              {nowIdx < 0
+                ? '격자 시간(06~02시) 밖'
+                : isFocusRun
+                  ? `${nowHM} · 10분마다 한 칸`
+                  : `${cellLabel(nowIdx)} 칸부터`}
+            </Text>
+          </View>
+          {gridRows.length ? (
+            <MiniGrid day={day} catMap={catMap} rows={gridRows} nowIdx={nowIdx} />
+          ) : null}
+        </PlannerCard>
+      ) : null}
 
       <View style={styles.controlsRow}>
         {isOverrun ? (
           <ControlButton icon="checkmark" label="휴식 종료" primary onPress={handleEndBreak} />
         ) : (
           <>
-            <ControlButton icon="refresh-outline" label="처음으로" onPress={pomodoro.reset} />
+            <ControlButton
+              icon={isIdle ? 'refresh-outline' : 'stop'}
+              label={isIdle ? '처음으로' : '그만하기'}
+              onPress={pomodoro.reset}
+            />
             <ControlButton
               icon={isRunning ? 'pause' : 'play'}
               label={isRunning ? '일시정지' : status === 'paused' ? '재개' : '시작'}
@@ -190,6 +293,20 @@ export default function TimerScreen() {
           onIncrease={() => handleAdjustBreak(BREAK_STEP)}
         />
       </PlannerCard>
+
+      {day && pickerOpen ? (
+        <FocusSheet
+          onClose={() => setPickerOpen(false)}
+          day={day}
+          cats={cats}
+          block={null}
+          nowIdx={nowIdx}
+          onStart={(id) => {
+            pomodoro.startFocus(id);
+            setPickerOpen(false);
+          }}
+        />
+      ) : null}
     </PlannerScreen>
   );
 }
@@ -331,18 +448,34 @@ const makeStyles = (theme: AppTheme) =>
     fontSize: 12,
     fontWeight: '600',
   },
-  statusPill: {
-    backgroundColor: theme.accentSoft,
-    borderRadius: PlannerRadius.chip,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one + 2,
-    marginTop: Spacing.two,
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
   },
-  statusPillText: {
-    color: theme.accent,
-    fontSize: 13,
-    fontWeight: '700',
+  badge: {
+    backgroundColor: theme.redSoft,
+    borderRadius: PlannerRadius.sm,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
   },
+  badgeText: { ...PlannerType.labelStrong, fontSize: 12, color: theme.red },
+  subjectCard: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  subjectBar: { width: 4, alignSelf: 'stretch', borderRadius: 2 },
+  subjectName: { ...PlannerType.labelStrong, fontSize: 15, color: theme.ink },
+  subjectSub: { ...PlannerType.caption, color: theme.textSecondary },
+  subjectLink: { ...PlannerType.labelStrong, color: theme.textSecondary },
+  dialCaption: { ...PlannerType.caption, color: theme.textSecondary },
+  dialHint: { ...PlannerType.caption, color: theme.textSecondary },
+  fillCard: { width: '100%', gap: Spacing.two },
+  fillHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  fillTitle: { ...PlannerType.labelStrong, color: theme.ink },
+  fillSub: { ...PlannerType.caption, color: theme.textSecondary },
   timeText: {
     color: theme.ink,
     fontFamily: PlannerSerif,

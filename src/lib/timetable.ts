@@ -94,6 +94,48 @@ export async function saveTimetable(dateKey: string, day: DayTimetable): Promise
   await setItem(`${TT_PREFIX}${dateKey}`, day);
 }
 
+const ttListeners = new Set<(dateKey: string) => void>();
+
+/** 타임테이블 저장 알림 구독 (타이머가 actual을 채우면 격자가 다시 읽음) */
+export function subscribeTimetable(fn: (dateKey: string) => void): () => void {
+  ttListeners.add(fn);
+  return () => {
+    ttListeners.delete(fn);
+  };
+}
+
+let writeChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * 최신 저장본을 읽어 fn으로 병합한 뒤 저장 (쓰기는 직렬화).
+ * 격자(planned)와 타이머(actual)가 같은 날짜를 동시에 써도 서로 덮어쓰지 않는다.
+ */
+export function updateTimetable(
+  dateKey: string,
+  fn: (latest: DayTimetable) => DayTimetable,
+): Promise<void> {
+  const p = writeChain.then(async () => {
+    await saveTimetable(dateKey, fn(await loadTimetable(dateKey)));
+    ttListeners.forEach((l) => l(dateKey));
+  });
+  writeChain = p.catch(() => {});
+  return p;
+}
+
+/** idx가 속한, 같은 과목으로 연속 계획된 칸 범위 [start, end] (계획 없으면 null) */
+export function plannedBlockAt(
+  day: DayTimetable,
+  idx: number,
+): { start: number; end: number; subject: SubjectId } | null {
+  const subject = day.cells[idx]?.planned;
+  if (!subject) return null;
+  let start = idx;
+  let end = idx;
+  while (start > 0 && day.cells[start - 1]?.planned === subject) start--;
+  while (end < CELL_COUNT - 1 && day.cells[end + 1]?.planned === subject) end++;
+  return { start, end, subject };
+}
+
 // ───────── 카테고리 ─────────
 
 export async function loadCategories(): Promise<Category[]> {
