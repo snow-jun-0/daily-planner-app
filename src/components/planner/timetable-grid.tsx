@@ -2,6 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { NewCategorySheet } from '@/components/planner/category-form';
 import { FocusSheet, type PlanBlock } from '@/components/planner/focus-sheet';
 import { PlanSheet } from '@/components/planner/plan-sheet';
 import { WeekGrid } from '@/components/planner/week-grid';
@@ -14,14 +15,17 @@ import { startFocus } from '@/lib/pomodoro';
 import {
   achievementRate,
   actualByCategory,
+  CATEGORY_COLORS,
   CELL_COUNT,
   CELL_MIN,
+  cellLabel,
   COLS,
   dateToCellIndex,
   FOCUS_CATEGORY,
   loadCategories,
   loadTimetable,
   plannedBlockAt,
+  saveCategories,
   remainingPlanMin,
   ROWS,
   START_HOUR,
@@ -82,6 +86,8 @@ export function TimetableGrid({
 
   const [day, setDay] = useState<DayTimetable | null>(null);
   const [cats, setCats] = useState<Category[]>([FOCUS_CATEGORY]);
+  const [catsLoaded, setCatsLoaded] = useState(false);
+  const [newCatOpen, setNewCatOpen] = useState(false);
   const [activeCat, setActiveCat] = useState<SubjectId>(FOCUS_CATEGORY.id);
   const [erase, setErase] = useState(false);
   /** 집중 시트: undefined=닫힘, null=바로 집중, 블록=계획 칸 탭 */
@@ -149,7 +155,10 @@ export function TimetableGrid({
   // 카테고리 화면(G9)에서 돌아오면 다시 읽는다
   useFocusEffect(
     useCallback(() => {
-      void loadCategories().then(setCats);
+      void loadCategories().then((c) => {
+        setCats(c);
+        setCatsLoaded(true);
+      });
     }, []),
   );
 
@@ -293,8 +302,19 @@ export function TimetableGrid({
   if (!day) {
     return (
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>타임테이블</Text>
-        <View style={styles.skeleton} />
+        <View style={styles.titleRow}>
+          <Text style={styles.sectionTitle}>타임테이블</Text>
+          <Text style={styles.hint}>불러오는 중…</Text>
+        </View>
+        <View>
+          {Array.from({ length: ROWS }).map((_, r) => (
+            <View key={r} style={[styles.gridRow, styles.skeletonRow]}>
+              {Array.from({ length: COLS }).map((_, c) => (
+                <View key={c} style={styles.skeletonCell} />
+              ))}
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
@@ -322,6 +342,23 @@ export function TimetableGrid({
       bottom: Math.min(ROWS * 60, toGridMin(e.end <= e.start ? e.end + 1440 : e.end)),
     }))
     .filter((e) => e.bottom > e.top);
+  // H7: 아직 내 과목이 없으면 첫 사용 안내
+  const needsFirstCat = catsLoaded && !cats.some((c) => c.id !== FOCUS_CATEGORY.id);
+  const subjectAt = (i: number) => day.cells[i]?.actual ?? day.cells[i]?.planned;
+  /** H4 색+라벨: 같은 과목 묶음의 첫 칸(또는 행의 첫 칸)에 과목 첫 글자 */
+  const labelAt = (i: number) => {
+    const sub = subjectAt(i);
+    if (prefs.a11yMode !== 'label' || !sub) return '';
+    if (i % COLS !== 0 && subjectAt(i - 1) === sub) return '';
+    return (catMap[sub]?.name ?? FOCUS_CATEGORY.name).slice(0, 1);
+  };
+  const a11yAt = (i: number) => {
+    const c = day.cells[i] ?? {};
+    const sub = c.actual ?? c.planned;
+    const state = c.actual ? '실제' : c.planned ? '계획' : '빈 칸';
+    return `${cellLabel(i)}, ${sub ? `${catMap[sub]?.name ?? '집중'}, ` : ''}${state}`;
+  };
+
   const eventCell = new Set<number>();
   for (const e of lane)
     for (let i = Math.floor(e.top / CELL_MIN); i < Math.ceil(e.bottom / CELL_MIN); i++)
@@ -401,7 +438,31 @@ export function TimetableGrid({
         </Pressable>
       </ScrollView>
 
-      <Text style={styles.hint}>드래그로 계획 칠하기 · 계획 칸 탭하면 집중</Text>
+      {needsFirstCat ? (
+        <View style={styles.onboard}>
+          <View style={styles.onboardHead}>
+            <View style={styles.onboardSwatches}>
+              {CATEGORY_COLORS.slice(0, 3).map((c) => (
+                <View key={c} style={[styles.onboardSwatch, { backgroundColor: c }]} />
+              ))}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.onboardTitle}>먼저 과목을 만들어요</Text>
+              <Text style={styles.hint}>과목마다 색이 정해지고, 그 색으로 칸을 칠해요.</Text>
+            </View>
+          </View>
+          <View style={styles.onboardBtns}>
+            <Pressable style={styles.onboardPrimary} onPress={() => setNewCatOpen(true)}>
+              <Text style={styles.focusBtnText}>과목 만들기</Text>
+            </Pressable>
+            <Pressable style={styles.onboardGhost} onPress={() => setSheet(null)}>
+              <Text style={styles.onboardGhostText}>과목 없이 집중</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.hint}>드래그로 계획 칠하기 · 계획 칸 탭하면 집중</Text>
+      )}
 
       <View style={styles.colHeadRow}>
         <View style={styles.axis} />
@@ -460,13 +521,36 @@ export function TimetableGrid({
             <View key={r} style={styles.gridRow}>
               {Array.from({ length: COLS }).map((_, c) => {
                 const idx = r * COLS + c;
+                const label = labelAt(idx);
+                const sub = subjectAt(idx);
                 return (
-                  <View key={c} style={[styles.cell, {
+                  <View
+                    key={c}
+                    accessible
+                    accessibilityLabel={a11yAt(idx)}
+                    style={[
+                      styles.cell,
+                      {
                         backgroundColor:
-                          !day.cells[idx]?.planned && !day.cells[idx]?.actual && eventCell.has(idx)
+                          !sub && eventCell.has(idx)
                             ? theme.line
                             : cellColor(day.cells[idx] ?? {}, catMap, theme),
-                      }]} />
+                      },
+                    ]}>
+                    {label ? (
+                      <Text
+                        style={[
+                          styles.cellLabel,
+                          {
+                            color: day.cells[idx]?.actual
+                              ? theme.card
+                              : (catMap[sub!]?.color ?? FOCUS_CATEGORY.color),
+                          },
+                        ]}>
+                        {label}
+                      </Text>
+                    ) : null}
+                  </View>
                 );
               })}
             </View>
@@ -474,6 +558,12 @@ export function TimetableGrid({
           {nowRow >= 0 ? <View style={[styles.nowLine, { top: nowRow * CELL_H }]} /> : null}
         </View>
       </View>
+
+      {needsFirstCat ? (
+        <Text style={[styles.hint, { textAlign: 'center' }]}>
+          1 과목 만들기 → 2 칸을 드래그해 계획 → 3 집중 시작
+        </Text>
+      ) : null}
 
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
@@ -519,6 +609,20 @@ export function TimetableGrid({
           onClearPlan={(block) => {
             setPlanned(block, undefined);
             setSheet(undefined);
+          }}
+        />
+      ) : null}
+
+      {newCatOpen ? (
+        <NewCategorySheet
+          onClose={() => setNewCatOpen(false)}
+          onCreate={(cat) => {
+            const next = [...cats, cat];
+            setCats(next);
+            void saveCategories(next);
+            setActiveCat(cat.id);
+            setErase(false);
+            setNewCatOpen(false);
           }}
         />
       ) : null}
@@ -654,5 +758,33 @@ const makeStyles = (theme: AppTheme) =>
       alignItems: 'center',
     },
     focusBtnText: { ...PlannerType.bodyMedium, color: theme.onAccent },
-    skeleton: { height: 400, borderRadius: PlannerRadius.md, backgroundColor: theme.surface },
+    skeletonRow: { gap: 3, height: CELL_H - 3, marginBottom: 3 },
+    skeletonCell: { flex: 1, borderRadius: 4, backgroundColor: theme.surface },
+    onboard: {
+      backgroundColor: theme.surface,
+      borderRadius: PlannerRadius.md,
+      padding: 16,
+      gap: 14,
+    },
+    onboardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    onboardSwatches: { flexDirection: 'row', gap: 3 },
+    onboardSwatch: { width: 16, height: 22, borderRadius: 4 },
+    onboardTitle: { ...PlannerType.labelStrong, fontSize: 15, color: theme.ink },
+    onboardBtns: { flexDirection: 'row', gap: 8 },
+    onboardPrimary: {
+      flex: 1,
+      backgroundColor: theme.accent,
+      borderRadius: PlannerRadius.md,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    onboardGhost: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+    onboardGhostText: { ...PlannerType.bodyMedium, fontWeight: '700', color: theme.ink },
+    cellLabel: {
+      ...PlannerType.caption,
+      fontSize: 10,
+      lineHeight: CELL_H - 2,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
   });

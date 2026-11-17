@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CategoryForm } from '@/components/planner/category-form';
 import { withAlpha } from '@/components/planner/mini-grid';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType } from '@/constants/theme';
@@ -132,40 +133,7 @@ export default function CategoriesScreen() {
 
         <View style={styles.card}>
           <Text style={styles.editTitle}>{editId ? '카테고리 편집' : '새 카테고리'}</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="예: 자격증"
-            placeholderTextColor={theme.textTertiary}
-            style={styles.input}
-          />
-          <View style={styles.paletteRow}>
-            {CATEGORY_COLORS.map((c) => (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                accessibilityLabel={`색 ${c}`}
-                style={[styles.paletteRing, color === c && { borderColor: theme.ink }]}>
-                <View style={[styles.paletteDot, { backgroundColor: c }]} />
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.previewRow}>
-            <Text style={styles.previewLabel}>미리보기</Text>
-            <View style={styles.previewCells}>
-              {[1, 1, 1, 0, 0, 0].map((actual, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.previewCell,
-                    actual
-                      ? { backgroundColor: color }
-                      : { backgroundColor: withAlpha(color, 0.18), borderColor: color },
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
+          <CategoryForm name={name} onName={setName} color={color} onColor={setColor} />
           <View style={styles.btnRow}>
             <Pressable style={styles.cancelBtn} onPress={editId ? remove : startNew}>
               <Text style={[styles.cancelText, editId ? { color: theme.red } : null]}>
@@ -230,27 +198,6 @@ const makeStyles = (theme: AppTheme) =>
     swatches: { flexDirection: 'row', gap: 2 },
     swatch: { width: 24, height: 22, borderRadius: 5, borderWidth: 1, borderColor: 'transparent' },
     editTitle: { ...PlannerType.titleS, color: theme.ink },
-    input: {
-      borderWidth: 1,
-      borderColor: theme.line,
-      borderRadius: PlannerRadius.md,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      color: theme.ink,
-      ...PlannerType.body,
-    },
-    paletteRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    paletteRing: {
-      padding: 3,
-      borderRadius: PlannerRadius.sm,
-      borderWidth: 2,
-      borderColor: 'transparent',
-    },
-    paletteDot: { width: 26, height: 26, borderRadius: 6 },
-    previewRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    previewLabel: { ...PlannerType.caption, color: theme.textSecondary, flex: 1 },
-    previewCells: { flexDirection: 'row', gap: 3 },
-    previewCell: { width: 28, height: 22, borderRadius: 4, borderWidth: 1, borderColor: 'transparent' },
     btnRow: { flexDirection: 'row', gap: 8 },
     cancelBtn: {
       flex: 1,

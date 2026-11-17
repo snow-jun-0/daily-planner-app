@@ -81,6 +81,8 @@ export type Prefs = {
   /** 저녁 회고 알림 시각(시) */
   dailyHour: number;
   autoBackup: boolean;
+  /** 색각 보조: 색만 / 색 + 라벨(블록 첫 칸에 과목 첫 글자) */
+  a11yMode: 'color' | 'label';
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -94,6 +96,7 @@ export const DEFAULT_PREFS: Prefs = {
   nagAlert: true,
   dailyHour: 21,
   autoBackup: true,
+  a11yMode: 'color',
 };
 
 const PREFS_KEY = 'settings:prefs';

@@ -139,6 +139,19 @@ export default function TimetableSettingsScreen() {
               />
             }
           />
+          <Divider />
+          <View style={styles.block}>
+            <Text style={styles.label}>색각 보조</Text>
+            <Segmented
+              options={[
+                { key: 'color', label: '색만' },
+                { key: 'label', label: '색 + 라벨' },
+              ]}
+              value={prefs.a11yMode}
+              onChange={(v) => updatePrefs({ a11yMode: v })}
+            />
+            <Text style={styles.caption}>라벨: 칸 묶음 첫 칸에 과목 첫 글자를 표시해요.</Text>
+          </View>
         </SettingsGroup>
       </ScrollView>
     </SafeAreaView>
