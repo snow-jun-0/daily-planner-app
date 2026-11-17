@@ -4,11 +4,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { priorityMeta } from '@/components/planner/todo-card';
 import type { AppTheme } from '@/constants/theme';
-import { PlannerSerif, Spacing } from '@/constants/theme';
+import { PlannerRadius, PlannerShadow, PlannerType, Spacing } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
-import { formatMonthDay, todayKey } from '@/lib/date';
+import { addDays, formatDisplayDate, todayKey } from '@/lib/date';
 import { DEFAULT_TASKLIST, setGTaskStatus } from '@/lib/gtasks';
+import { requestViewDate } from '@/lib/navigation';
 import { loadAllTaskDays, saveTasks, type Task } from '@/lib/tasks';
 
 type FilterId = 'todo' | 'done' | 'all';
@@ -18,19 +20,24 @@ const FILTERS: { id: FilterId; label: string }[] = [
   { id: 'all', label: '전체' },
 ];
 
+const EMPTY: Record<FilterId, { title: string; sub: string }> = {
+  todo: { title: '남은 할 일이 없어요', sub: '할 일을 모두 끝냈어요. 수고했어요!' },
+  done: { title: '완료한 할 일이 없어요', sub: '하나씩 체크하면 여기에 모여요.' },
+  all: { title: '아직 할 일이 없어요', sub: '오늘 화면에서 할 일을 추가해 보세요.' },
+};
+
+type Item = { date: string; task: Task };
+
 export default function AllTasksScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [days, setDays] = useState<Record<string, Task[]>>({});
   const [filter, setFilter] = useState<FilterId>('todo');
 
-  const reload = useCallback(() => {
-    void loadAllTaskDays().then(setDays);
-  }, []);
   useFocusEffect(
     useCallback(() => {
-      reload();
-    }, [reload]),
+      void loadAllTaskDays().then(setDays);
+    }, []),
   );
 
   function toggle(date: string, id: string) {
@@ -48,27 +55,56 @@ export default function AllTasksScreen() {
       );
   }
 
+  // 할 일 추가는 오늘 화면의 할 일 카드에서
+  function goAdd() {
+    requestViewDate(todayKey());
+    router.navigate('/');
+  }
+
   const today = todayKey();
-  const groups = Object.keys(days)
+  const tomorrow = addDays(today, 1);
+  const all: Item[] = Object.keys(days)
     .sort()
-    .map((date) => ({
-      date,
-      items: (days[date] ?? []).filter((t) =>
-        filter === 'todo' ? !t.done : filter === 'done' ? t.done : true,
-      ),
-    }))
-    .filter((g) => g.items.length > 0);
-  const total = groups.reduce((s, g) => s + g.items.length, 0);
+    .flatMap((date) => (days[date] ?? []).map((task) => ({ date, task })));
+  const counts = {
+    todo: all.filter((i) => !i.task.done).length,
+    done: all.filter((i) => i.task.done).length,
+    all: all.length,
+  };
+  const shown = all.filter((i) =>
+    filter === 'todo' ? !i.task.done : filter === 'done' ? i.task.done : true,
+  );
+
+  // 미완료 탭에선 지난 날짜를 '지난 할 일' 하나로 묶는다
+  const groups: { key: string; label: string; overdue?: boolean; items: Item[] }[] = [];
+  for (const it of shown) {
+    const overdue = filter === 'todo' && it.date < today;
+    const key = overdue ? 'overdue' : it.date;
+    let g = groups.find((x) => x.key === key);
+    if (!g) {
+      const label = overdue
+        ? '지난 할 일'
+        : it.date === today
+          ? `오늘 · ${formatDisplayDate(it.date)}`
+          : it.date === tomorrow
+            ? `내일 · ${formatDisplayDate(it.date)}`
+            : formatDisplayDate(it.date);
+      g = { key, label, overdue, items: [] };
+      groups.push(g);
+    }
+    g.items.push(it);
+  }
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color={theme.ink} />
-          <Text style={styles.backText}>뒤로</Text>
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Ionicons name="chevron-back" size={22} color={theme.ink} />
         </Pressable>
         <Text style={styles.title}>전체 할 일</Text>
-        <View style={styles.headerSpacer} />
+        <Pressable onPress={goAdd} hitSlop={10} style={styles.plusBtn} accessibilityLabel="할 일 추가">
+          <Ionicons name="add" size={22} color={theme.ink} />
+        </Pressable>
       </View>
 
       <View style={styles.tabs}>
@@ -79,34 +115,63 @@ export default function AllTasksScreen() {
               key={f.id}
               onPress={() => setFilter(f.id)}
               style={[styles.tab, on && styles.tabOn]}>
-              <Text style={[styles.tabText, on && styles.tabTextOn]}>{f.label}</Text>
+              <Text style={[styles.tabText, on && styles.tabTextOn]}>
+                {f.label}
+                {f.id === 'all' ? '' : ` ${counts[f.id]}`}
+              </Text>
             </Pressable>
           );
         })}
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {total === 0 ? (
-          <Text style={styles.empty}>해당하는 할 일이 없어요</Text>
-        ) : (
-          groups.map(({ date, items }) => (
-            <View key={date} style={styles.group}>
-              <Text style={styles.groupLabel}>
-                {date === today ? '오늘 · ' : ''}
-                {formatMonthDay(date)}
-              </Text>
-              {items.map((task) => (
-                <Pressable key={task.id} onPress={() => toggle(date, task.id)} style={styles.row}>
-                  <View style={[styles.check, task.done && styles.checkOn]}>
-                    {task.done && <Ionicons name="checkmark" size={14} color={theme.onAccent} />}
-                  </View>
-                  <Text style={[styles.rowText, task.done && styles.rowTextDone]}>{task.text}</Text>
-                </Pressable>
-              ))}
+      {groups.length === 0 ? (
+        <View style={styles.empty}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="checkmark" size={22} color={theme.textSecondary} />
+          </View>
+          <Text style={styles.emptyTitle}>{EMPTY[filter].title}</Text>
+          <Text style={styles.emptySub}>{EMPTY[filter].sub}</Text>
+          <Pressable style={styles.emptyBtn} onPress={goAdd}>
+            <Text style={styles.emptyBtnText}>할 일 추가</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {groups.map((g) => (
+            <View key={g.key} style={styles.group}>
+              <View style={styles.groupHead}>
+                <Text style={[styles.groupLabel, g.overdue && { color: theme.red }]}>{g.label}</Text>
+                <Text style={[styles.groupLabel, g.overdue && { color: theme.red }]}>
+                  {g.items.length}
+                </Text>
+              </View>
+              <View style={styles.card}>
+                {g.items.map(({ date, task }) => {
+                  const meta = priorityMeta(theme)[task.priority];
+                  return (
+                    <Pressable
+                      key={task.id}
+                      onPress={() => toggle(date, task.id)}
+                      style={styles.row}>
+                      <View style={[styles.check, task.done && styles.checkOn]}>
+                        {task.done && (
+                          <Ionicons name="checkmark" size={14} color={theme.onAccent} />
+                        )}
+                      </View>
+                      <Text style={[styles.rowText, task.done && styles.rowTextDone]}>
+                        {task.text}
+                      </Text>
+                      <View style={[styles.badge, { backgroundColor: meta.bg }]}>
+                        <Text style={[styles.badgeText, { color: meta.color }]}>{meta.label}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          ))
-        )}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -117,14 +182,19 @@ const makeStyles = (theme: AppTheme) =>
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      gap: Spacing.two,
       paddingHorizontal: Spacing.three,
       paddingVertical: Spacing.two,
     },
-    backBtn: { flexDirection: 'row', alignItems: 'center', width: 60 },
-    backText: { color: theme.ink, fontSize: 14 },
-    title: { color: theme.ink, fontFamily: PlannerSerif, fontSize: 20, fontWeight: '600' },
-    headerSpacer: { width: 60 },
+    title: { ...PlannerType.titleM, color: theme.ink, flex: 1 },
+    plusBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     tabs: {
       flexDirection: 'row',
       gap: Spacing.two,
@@ -132,34 +202,60 @@ const makeStyles = (theme: AppTheme) =>
       marginBottom: Spacing.two,
     },
     tab: {
-      paddingVertical: Spacing.one + 2,
+      paddingVertical: Spacing.two,
       paddingHorizontal: Spacing.three,
-      borderRadius: 999,
+      borderRadius: PlannerRadius.chip,
+      borderWidth: 1,
+      borderColor: theme.line,
       backgroundColor: theme.card,
     },
-    tabOn: { backgroundColor: theme.accent },
-    tabText: { fontSize: 13, color: theme.faint, fontWeight: '600' },
+    tabOn: { backgroundColor: theme.accent, borderColor: theme.accent },
+    tabText: { ...PlannerType.labelStrong, color: theme.textSecondary },
     tabTextOn: { color: theme.onAccent },
     content: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.six },
     group: { gap: Spacing.two },
-    groupLabel: { fontSize: 13, fontWeight: '700', color: theme.faint, marginBottom: 2 },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.two,
-      paddingVertical: Spacing.one + 2,
+    groupHead: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
+    groupLabel: { ...PlannerType.labelStrong, color: theme.textSecondary },
+    card: {
+      backgroundColor: theme.card,
+      borderRadius: PlannerRadius.card,
+      paddingHorizontal: Spacing.three,
+      paddingVertical: Spacing.one,
+      ...PlannerShadow,
     },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
     check: {
       width: 22,
       height: 22,
       borderRadius: 6,
-      borderWidth: 2,
-      borderColor: theme.faint,
+      borderWidth: 1.5,
+      borderColor: theme.textTertiary,
       alignItems: 'center',
       justifyContent: 'center',
     },
     checkOn: { backgroundColor: theme.accent, borderColor: theme.accent },
-    rowText: { fontSize: 15, color: theme.ink, flex: 1 },
-    rowTextDone: { textDecorationLine: 'line-through', color: theme.faint },
-    empty: { textAlign: 'center', color: theme.faint, marginTop: 40 },
+    rowText: { ...PlannerType.bodyMedium, fontSize: 15, color: theme.ink, flex: 1 },
+    rowTextDone: { textDecorationLine: 'line-through', color: theme.textTertiary },
+    badge: { borderRadius: PlannerRadius.sm, paddingHorizontal: 8, paddingVertical: 3 },
+    badgeText: { ...PlannerType.labelStrong, fontSize: 12 },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 32 },
+    emptyIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    emptyTitle: { ...PlannerType.labelStrong, fontSize: 15, color: theme.ink },
+    emptySub: { ...PlannerType.caption, color: theme.textSecondary },
+    emptyBtn: {
+      marginTop: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: PlannerRadius.md,
+      backgroundColor: theme.surface,
+    },
+    emptyBtnText: { ...PlannerType.labelStrong, color: theme.ink },
   });

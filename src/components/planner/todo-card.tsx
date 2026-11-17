@@ -17,7 +17,7 @@ type TodoCardProps = {
   onViewAll?: () => void;
 };
 
-const priorityMeta = (
+export const priorityMeta = (
   theme: AppTheme,
 ): Record<TaskPriority, { label: string; color: string; bg: string }> => ({
   high: { label: '높음', color: theme.red, bg: theme.redSoft },
