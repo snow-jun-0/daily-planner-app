@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { NewCategorySheet } from '@/components/planner/category-form';
+import { CircularProgress } from '@/components/planner/circular-progress';
 import { FocusSheet, type PlanBlock } from '@/components/planner/focus-sheet';
 import { PlanSheet } from '@/components/planner/plan-sheet';
 import { WeekGrid } from '@/components/planner/week-grid';
@@ -23,6 +24,7 @@ import {
   dateToCellIndex,
   FOCUS_CATEGORY,
   loadCategories,
+  loadStreak,
   loadTimetable,
   plannedBlockAt,
   saveCategories,
@@ -88,6 +90,7 @@ export function TimetableGrid({
   const [cats, setCats] = useState<Category[]>([FOCUS_CATEGORY]);
   const [catsLoaded, setCatsLoaded] = useState(false);
   const [newCatOpen, setNewCatOpen] = useState(false);
+  const [streak, setStreak] = useState(0);
   const [activeCat, setActiveCat] = useState<SubjectId>(FOCUS_CATEGORY.id);
   const [erase, setErase] = useState(false);
   /** 집중 시트: undefined=닫힘, null=바로 집중, 블록=계획 칸 탭 */
@@ -155,6 +158,7 @@ export function TimetableGrid({
   // 카테고리 화면(G9)에서 돌아오면 다시 읽는다
   useFocusEffect(
     useCallback(() => {
+      void loadStreak().then(setStreak);
       void loadCategories().then((c) => {
         setCats(c);
         setCatsLoaded(true);
@@ -325,6 +329,9 @@ export function TimetableGrid({
   const byCat = actualByCategory(day);
   const nowIdx = isToday ? dateToCellIndex(new Date()) : -1;
   const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
+  const [yy, mm, dd] = dateKey.split('-').map(Number);
+  const goalH = prefs.goalHours[(new Date(yy, mm - 1, dd).getDay() + 6) % 7] ?? 0;
+  const goalPct = goalH ? Math.min(100, Math.round((actualMin / (goalH * 60)) * 100)) : 0;
 
   function openNewPlan() {
     const start = Math.max(0, nowIdx);
@@ -367,20 +374,29 @@ export function TimetableGrid({
 
   return (
     <View style={styles.card}>
-      <View style={styles.totalRow}>
-        <View>
+      {/* I3: 목표 링 + 연속 기록 — 탭하면 목표 화면(I1) */}
+      <Pressable style={styles.totalRow} onPress={() => router.push('/goals' as never)}>
+        <CircularProgress percent={goalPct} size={64} strokeWidth={7}>
+          <Text style={styles.ringText}>{goalPct}%</Text>
+        </CircularProgress>
+        <View style={{ flex: 1 }}>
           <Text style={styles.totalLabel}>TOTAL TIME</Text>
           <Text style={styles.totalValue}>{fmtTotal(actualMin)}</Text>
+          <Text style={styles.rateSub}>
+            {plannedMin > 0
+              ? `계획 ${fmtHM(plannedMin)} · ${Math.round(rate * 100)}% 달성`
+              : '계획 없음'}
+          </Text>
         </View>
-        {plannedMin > 0 ? (
-          <View style={styles.rateBox}>
-            <Text style={styles.rateText}>{Math.round(rate * 100)}%</Text>
-            <Text style={styles.rateSub}>계획 {fmtHM(plannedMin)}</Text>
-          </View>
-        ) : (
-          <Text style={styles.rateSub}>계획 없음</Text>
-        )}
-      </View>
+        <View style={styles.rateBox}>
+          <Text style={styles.rateSub}>목표 {goalH}H</Text>
+          {streak > 0 ? (
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakText}>{streak}일 연속</Text>
+            </View>
+          ) : null}
+        </View>
+      </Pressable>
 
       {Object.keys(byCat).length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statRow}>
@@ -657,11 +673,19 @@ const makeStyles = (theme: AppTheme) =>
       gap: 12,
       ...PlannerShadow,
     },
-    totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    totalRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    ringText: { ...PlannerType.labelStrong, color: theme.ink },
+    streakBadge: {
+      marginTop: 4,
+      backgroundColor: theme.amberSoft,
+      borderRadius: PlannerRadius.sm,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    streakText: { ...PlannerType.labelStrong, fontSize: 12, color: theme.amber },
     totalLabel: { ...PlannerType.overline, color: theme.textTertiary },
     totalValue: { ...PlannerType.display, color: theme.ink },
     rateBox: { alignItems: 'flex-end' },
-    rateText: { ...PlannerType.titleM, color: theme.ink },
     rateSub: { ...PlannerType.caption, color: theme.textSecondary },
     statRow: { flexGrow: 0 },
     statChip: {

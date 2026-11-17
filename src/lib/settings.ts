@@ -83,6 +83,8 @@ export type Prefs = {
   autoBackup: boolean;
   /** 색각 보조: 색만 / 색 + 라벨(블록 첫 칸에 과목 첫 글자) */
   a11yMode: 'color' | 'label';
+  /** 요일별 하루 목표(시간), 월요일부터 */
+  goalHours: number[];
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -97,6 +99,7 @@ export const DEFAULT_PREFS: Prefs = {
   dailyHour: 21,
   autoBackup: true,
   a11yMode: 'color',
+  goalHours: [8, 8, 8, 8, 8, 4, 4],
 };
 
 const PREFS_KEY = 'settings:prefs';

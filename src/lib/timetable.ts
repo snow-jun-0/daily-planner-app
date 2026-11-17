@@ -3,6 +3,7 @@
 // 새벽 00~02시 기록은 '전날' 타임테이블에 속한다 (06시 기준으로 하루 구분).
 
 import { scheduleAutoBackup } from './backup';
+import { addDays } from './date';
 import { getItem, setItem } from './storage';
 
 export type SubjectId = string;
@@ -150,6 +151,15 @@ export async function loadCategories(): Promise<Category[]> {
 export async function saveCategories(cats: Category[]): Promise<void> {
   await setItem(CAT_KEY, cats);
   scheduleAutoBackup();
+}
+
+/** 연속 기록: 오늘(아직 비었으면 어제)부터 거꾸로 1칸 이상 채운 날 수 */
+export async function loadStreak(today: string = timetableDateKey()): Promise<number> {
+  let k = today;
+  if (!totalActualMin(await loadTimetable(k))) k = addDays(k, -1);
+  let n = 0;
+  for (; n < 365; n++, k = addDays(k, -1)) if (!totalActualMin(await loadTimetable(k))) break;
+  return n;
 }
 
 /** 블록에서 아직 안 채운 계획 분 (nowIdx 이전 칸은 지난 것으로 보고 뺀다, 오늘 아니면 -1) */

@@ -16,11 +16,11 @@ import {
   COLS,
   FOCUS_CATEGORY,
   loadCategories,
+  loadStreak,
   loadTimetable,
   ROWS,
   START_HOUR,
   timetableDateKey,
-  totalActualMin,
   type Category,
   type DayTimetable,
   type SubjectId,
@@ -109,14 +109,7 @@ async function loadData(y: number, m0: number): Promise<Data> {
     loadMonthFocusStats(y, m0),
   ]);
 
-  // 연속 기록: 오늘(비었으면 어제)부터 거꾸로 1칸 이상 채운 날
-  let streak = 0;
-  let k = today;
-  if (!totalActualMin(recentDays[27])) k = addDays(k, -1);
-  for (let i = 0; i < 365; i++, k = addDays(k, -1)) {
-    if (!totalActualMin(await loadTimetable(k))) break;
-    streak++;
-  }
+  const streak = await loadStreak(today);
 
   const heat = Array.from({ length: 7 }, () => Array<number>(ROWS).fill(0));
   recentDays.forEach((d, i) => {
