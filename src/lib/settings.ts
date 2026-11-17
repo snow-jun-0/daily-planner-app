@@ -85,6 +85,8 @@ export type Prefs = {
   a11yMode: 'color' | 'label';
   /** 요일별 하루 목표(시간), 월요일부터 */
   goalHours: number[];
+  /** 과목 색 팔레트 (J6) */
+  palette: 'base' | 'pastel' | 'mono' | 'forest' | 'sunset' | 'candy';
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -100,6 +102,7 @@ export const DEFAULT_PREFS: Prefs = {
   autoBackup: true,
   a11yMode: 'color',
   goalHours: [8, 8, 8, 8, 8, 4, 4],
+  palette: 'base',
 };
 
 const PREFS_KEY = 'settings:prefs';

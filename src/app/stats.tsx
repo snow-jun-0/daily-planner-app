@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CircularProgress } from '@/components/planner/circular-progress';
 import { withAlpha } from '@/components/planner/mini-grid';
+import { ProLock } from '@/components/planner/pro-lock';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType, Spacing } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
@@ -190,8 +191,12 @@ export default function StatsScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Summary data={data} styles={styles} theme={theme} />
           <SubjectBars data={data} catMap={catMap} styles={styles} />
-          <Heatmap heat={data.heat} styles={styles} theme={theme} />
-          <Last7 rows={data.last7} styles={styles} theme={theme} />
+          <ProLock desc="언제 집중이 잘 되는지 요일 × 시간대로 보여줘요.">
+            <Heatmap heat={data.heat} styles={styles} theme={theme} />
+          </ProLock>
+          <ProLock desc="계획 대비 실제를 날짜별로 비교해요.">
+            <Last7 rows={data.last7} styles={styles} theme={theme} />
+          </ProLock>
           <PlanFill agg={data.month} styles={styles} theme={theme} />
         </ScrollView>
       ) : null}

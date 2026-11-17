@@ -15,6 +15,7 @@ import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerSerif, PlannerType, Spacing } from '@/constants/theme';
 import { useTheme, useThemeControl } from '@/constants/theme-context';
 import { usePrefs } from '@/hooks/use-prefs';
+import { usePro } from '@/lib/pro';
 import { signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
 import { cancelDailyReflection, scheduleDailyReflection } from '@/lib/notify';
 import * as pomodoro from '@/lib/pomodoro';
@@ -28,6 +29,7 @@ export default function SettingsScreen() {
   const { isDark, setDark } = useThemeControl();
   const { session } = useAuthSession();
   const [prefs, updatePrefs] = usePrefs();
+  const pro = usePro();
   const [reviewAlert, setReviewAlert] = useState(false);
   const [catSummary, setCatSummary] = useState('');
   const { settings } = pomodoro.getState();
@@ -87,6 +89,15 @@ export default function SettingsScreen() {
   return (
     <PlannerScreen>
       <Text style={styles.title}>설정</Text>
+
+      <SettingsGroup>
+        <SettingsRow
+          icon="sparkles-outline"
+          title="데일리 플래너 Pro"
+          subtitle={pro.isPro ? 'Pro 사용 중' : '고급 통계 · 공유 카드 스타일 · 테마'}
+          onPress={() => router.push('/pro' as never)}
+        />
+      </SettingsGroup>
 
       <SettingsGroup label="타임테이블">
         <SettingsRow
@@ -157,6 +168,13 @@ export default function SettingsScreen() {
       </SettingsGroup>
 
       <SettingsGroup label="표시">
+        <SettingsRow
+          icon="color-palette-outline"
+          title="테마"
+          subtitle="과목 색 팔레트"
+          onPress={() => router.push('/theme' as never)}
+        />
+        <Divider />
         <SettingsRow
           icon="moon-outline"
           title="다크 모드"

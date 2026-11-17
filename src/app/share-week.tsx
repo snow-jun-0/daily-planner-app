@@ -1,5 +1,5 @@
 import * as Sharing from 'expo-sharing';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import type { AppTheme } from '@/constants/theme';
 import { Planner, PlannerDark, PlannerRadius, PlannerSerif, PlannerType, Spacing } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
 import { weekKeys } from '@/lib/date';
+import { usePro } from '@/lib/pro';
 import {
   FOCUS_CATEGORY,
   loadCategories,
@@ -52,6 +53,7 @@ export default function ShareWeekScreen() {
   const [tone, setTone] = useState<CardTone>('light');
   const [hideNames, setHideNames] = useState(false);
   const cardRef = useRef<View>(null);
+  const { isPro } = usePro();
 
   useEffect(() => {
     void Promise.all(keys.map(loadTimetable)).then(setDays);
@@ -144,11 +146,12 @@ export default function ShareWeekScreen() {
         <Segmented
           options={[
             { key: 'light', label: '밝게' },
-            { key: 'dark', label: '어둡게' },
-            { key: 'blue', label: '브랜드 블루' },
+            { key: 'dark', label: isPro ? '어둡게' : '어둡게 · Pro' },
+            { key: 'blue', label: isPro ? '브랜드 블루' : '블루 · Pro' },
           ]}
           value={tone}
-          onChange={setTone}
+          // 무료는 밝게만 — 다른 톤은 Pro 화면으로
+          onChange={(v) => (v === 'light' || isPro ? setTone(v) : router.push('/pro' as never))}
         />
         <View style={styles.toggleRow}>
           <Text style={styles.label}>과목 이름 숨기기</Text>

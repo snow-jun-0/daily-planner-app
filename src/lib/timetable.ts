@@ -198,6 +198,32 @@ export const CATEGORY_COLORS = [
   '#D6599B',
 ];
 
+/** 과목 색 팔레트 (J6) — base 외에는 Pro */
+export const PALETTES = {
+  base: { name: '기본', colors: CATEGORY_COLORS },
+  pastel: {
+    name: '파스텔',
+    colors: ['#9DB4F0', '#A8DCC0', '#C9B6F2', '#A8DDE8', '#F5D9A0', '#F2B3B3', '#F2B8D8', '#C9C9C9'],
+  },
+  mono: {
+    name: '모노',
+    colors: ['#111111', '#3D3D3D', '#666666', '#8C8C8C', '#B3B3B3', '#5A5A5A', '#2A2A2A', '#A0A0A0'],
+  },
+  forest: {
+    name: '포레스트',
+    colors: ['#2F5D50', '#5C8D5A', '#A3B18A', '#D6D2C4', '#B5651D', '#7A8450', '#3E6259', '#8C6A43'],
+  },
+  sunset: {
+    name: '선셋',
+    colors: ['#E76F51', '#F4A261', '#E9C46A', '#2A9D8F', '#264653', '#D1495B', '#EDAE49', '#00798C'],
+  },
+  candy: {
+    name: '캔디',
+    colors: ['#FF6F91', '#C77DFF', '#4CC9F0', '#80ED99', '#FFD166', '#FF9F1C', '#F15BB5', '#00BBF9'],
+  },
+} as const;
+export type PaletteId = keyof typeof PALETTES;
+
 function newCatId(): string {
   return `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }

@@ -5,7 +5,8 @@ import { withAlpha } from '@/components/planner/mini-grid';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerType } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
-import { CATEGORY_COLORS, createCategory, type Category } from '@/lib/timetable';
+import { usePrefs } from '@/hooks/use-prefs';
+import { CATEGORY_COLORS, createCategory, PALETTES, type Category } from '@/lib/timetable';
 
 type FormProps = {
   name: string;
@@ -20,6 +21,7 @@ type FormProps = {
 export function CategoryForm({ name, onName, color, onColor, presets }: FormProps) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const [prefs] = usePrefs();
   return (
     <>
       <TextInput
@@ -42,7 +44,7 @@ export function CategoryForm({ name, onName, color, onColor, presets }: FormProp
         </View>
       ) : null}
       <View style={styles.paletteRow}>
-        {CATEGORY_COLORS.map((c) => (
+        {PALETTES[prefs.palette].colors.map((c) => (
           <Pressable
             key={c}
             onPress={() => onColor(c)}
