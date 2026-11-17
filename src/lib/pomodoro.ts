@@ -1,5 +1,8 @@
+import * as Haptics from 'expo-haptics';
+
 import { todayKey } from './date';
 import { cancelOverrunNags, notifyPhaseEnd, scheduleOverrunNags, startRepeatingAlarm } from './notify';
+import { getPrefs } from './settings';
 import { recordBreakOverrun, recordFocusSession } from './stats';
 import { getItem, setItem } from './storage';
 import {
@@ -102,6 +105,7 @@ const filled = new Set<string>();
 /** fillFrom ~ until 사이 칸들을 오늘 타임테이블 actual로 마킹. 새 칸이 생길 때만 저장(≈10분 1회). */
 function fillActual(until: number): void {
   if (fillFrom == null) return;
+  const firstFill = filled.size === 0;
   const byDate = new Map<string, number[]>();
   // 칸 크기 간격으로 걸으므로 백그라운드였던 구간도 빠짐없이 채운다
   for (let t = fillFrom; ; t = Math.min(t + CELL_MIN * 60_000, until)) {
@@ -115,6 +119,11 @@ function fillActual(until: number): void {
     if (t >= until) break;
   }
   fillFrom = until;
+  // 시작 직후 첫 칸 말고, 새 칸으로 넘어갈 때만 진동
+  if (byDate.size && !firstFill)
+    void getPrefs().then((p) => {
+      if (p.hapticOnFill) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    });
   const subject = state.focusSubject;
   byDate.forEach((idxs, dk) => {
     void updateTimetable(dk, (day) => {

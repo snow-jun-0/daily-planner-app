@@ -1,49 +1,51 @@
-import { Ionicons } from '@expo/vector-icons';
-import type { ComponentProps, ReactNode } from 'react';
-import { useEffect, useState, useMemo } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import Constants from 'expo-constants';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { PlannerCard } from '@/components/planner/planner-card';
 import { PlannerScreen } from '@/components/planner/planner-screen';
-import { PlannerRadius, PlannerSerif, Spacing } from '@/constants/theme';
-import type { AppTheme } from '@/constants/theme';
-import { useTheme, useThemeControl } from '@/constants/theme-context';
-import { restoreFromCloud, uploadBackup } from '@/lib/backup';
-import { signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
-import { syncGoogleCalendar } from '@/lib/gcal';
-import { cancelDailyReflection, scheduleDailyReflection } from '@/lib/notify';
 import {
-  getAutoSyncCalendar,
-  getNotifyDaily,
-  getNotifyMode,
-  resetAllData,
-  setAutoSyncCalendar,
-  setNotifyDaily,
-  setNotifyMode,
-  type NotifyMode,
-} from '@/lib/settings';
+  Divider,
+  SettingsGroup,
+  SettingsRow,
+  Segmented,
+  Toggle,
+} from '@/components/planner/settings-ui';
+import type { AppTheme } from '@/constants/theme';
+import { PlannerRadius, PlannerSerif, PlannerType, Spacing } from '@/constants/theme';
+import { useTheme, useThemeControl } from '@/constants/theme-context';
+import { usePrefs } from '@/hooks/use-prefs';
+import { signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
+import { cancelDailyReflection, scheduleDailyReflection } from '@/lib/notify';
+import * as pomodoro from '@/lib/pomodoro';
+import { getNotifyDaily, resetAllData, setNotifyDaily } from '@/lib/settings';
+import { FOCUS_CATEGORY, loadCategories } from '@/lib/timetable';
 import { syncWidgets } from '@/lib/widget-sync';
-
-type IoniconName = ComponentProps<typeof Ionicons>['name'];
-type AlertMode = 'mute' | 'vibrate' | 'sound';
-
-const ALERT_MODES: { key: AlertMode; label: string }[] = [
-  { key: 'mute', label: '무음' },
-  { key: 'vibrate', label: '진동' },
-  { key: 'sound', label: '소리' },
-];
 
 export default function SettingsScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { isDark, setDark } = useThemeControl();
-  const switchColors = {
-    trackColor: { false: theme.line, true: theme.accent },
-    thumbColor: theme.card,
-    ios_backgroundColor: theme.line,
-  };
-
   const { session } = useAuthSession();
+  const [prefs, updatePrefs] = usePrefs();
+  const [reviewAlert, setReviewAlert] = useState(false);
+  const [catSummary, setCatSummary] = useState('');
+  const { settings } = pomodoro.getState();
+
+  useFocusEffect(
+    useCallback(() => {
+      void getNotifyDaily().then(setReviewAlert);
+      void loadCategories().then((cats) => {
+        const names = cats.filter((c) => c.id !== FOCUS_CATEGORY.id).map((c) => c.name);
+        setCatSummary(
+          names.length > 3
+            ? `${names.slice(0, 3).join(', ')} 외 ${names.length - 3}개`
+            : names.join(', ') || '과목을 추가해 보세요',
+        );
+      });
+    }, []),
+  );
+
   const handleGoogle = () => {
     if (session) {
       Alert.alert('구글 연결 해제', '로그아웃할까요?', [
@@ -52,84 +54,32 @@ export default function SettingsScreen() {
       ]);
     } else {
       void signInWithGoogle().catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        Alert.alert('로그인 실패', msg);
+        Alert.alert('로그인 실패', e instanceof Error ? e.message : String(e));
       });
     }
-  };
-  const handleBackup = () => {
-    if (!session) {
-      Alert.alert('데이터 백업', '먼저 구글 로그인이 필요해요');
-      return;
-    }
-    void uploadBackup().then((ok) =>
-      Alert.alert('데이터 백업', ok ? '백업 완료!' : '백업 실패 — 잠시 후 다시 시도해줘'),
-    );
-  };
-  const handleRestore = () => {
-    if (!session) {
-      Alert.alert('백업 복원', '먼저 구글 로그인이 필요해요');
-      return;
-    }
-    Alert.alert('백업 복원', '클라우드 백업으로 덮어쓸까요? 지금 기기의 데이터는 사라져요', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '복원',
-        style: 'destructive',
-        onPress: () =>
-          void restoreFromCloud().then((ok) =>
-            Alert.alert('백업 복원', ok ? '복원 완료! 앱을 다시 켜줘' : '클라우드에 백업이 없어'),
-          ),
-      },
-    ]);
-  };
-  const [syncEnabled, setSyncEnabled] = useState(false);
-  const [reviewAlert, setReviewAlert] = useState(false);
-  const [alertMode, setAlertMode] = useState<AlertMode>('sound');
-
-  useEffect(() => {
-    void (async () => {
-      setAlertMode(await getNotifyMode());
-      setReviewAlert(await getNotifyDaily());
-      setSyncEnabled(await getAutoSyncCalendar());
-    })();
-  }, []);
-
-  const handleAlertMode = (mode: AlertMode) => {
-    setAlertMode(mode);
-    void setNotifyMode(mode as NotifyMode);
   };
 
   const handleReviewAlert = (v: boolean) => {
     setReviewAlert(v);
     void (async () => {
       await setNotifyDaily(v);
-      if (v) await scheduleDailyReflection();
+      if (v) await scheduleDailyReflection(prefs.dailyHour);
       else await cancelDailyReflection();
     })();
   };
 
-  const handleAutoSync = (v: boolean) => {
-    setSyncEnabled(v);
-    void (async () => {
-      await setAutoSyncCalendar(v);
-      if (v && session) await syncGoogleCalendar().catch(() => {});
-    })();
-  };
-
   const handleReset = () => {
-    Alert.alert('데이터 초기화', '모든 일정과 할 일이 삭제됩니다. 계속할까요?', [
+    Alert.alert('데이터 초기화', '모든 기록과 할 일이 삭제됩니다. 계속할까요?', [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
         style: 'destructive',
-        onPress: () => {
+        onPress: () =>
           void (async () => {
             await resetAllData();
             await syncWidgets();
             Alert.alert('완료', '데이터가 초기화되었어요.');
-          })();
-        },
+          })(),
       },
     ]);
   };
@@ -138,273 +88,135 @@ export default function SettingsScreen() {
     <PlannerScreen>
       <Text style={styles.title}>설정</Text>
 
-      <SettingsGroup label="계정 연동">
+      <SettingsGroup label="타임테이블">
         <SettingsRow
-          icon="logo-google"
-          title="구글 캘린더"
-          subtitle={session ? (session.user.email ?? '연결됨') : '일정 자동 가져오기'}
-          right={
-            <View style={styles.connectedBadge}>
-              <Text style={[styles.connectedBadgeText, session ? { color: theme.accent } : null]}>
-                {session ? '연결됨' : '연결 안 됨'}
-              </Text>
-            </View>
-          }
-          onPress={handleGoogle}
+          icon="time-outline"
+          title="시간 범위"
+          value="06:00 – 익일 02:00"
+          onPress={() => router.push('/timetable-settings' as never)}
         />
+        <Divider />
+        <SettingsRow icon="grid-outline" title="격자 단위" subtitle="드래그로 칠할 때 최소 단위" />
+        <View style={styles.segmentWrap}>
+          <Segmented
+            options={[
+              { key: 1, label: '10분' },
+              { key: 3, label: '30분' },
+              { key: 6, label: '1시간' },
+            ]}
+            value={prefs.brushCells}
+            onChange={(v) => updatePrefs({ brushCells: v })}
+          />
+        </View>
+        <Divider />
         <SettingsRow
-          icon="cloud-upload-outline"
-          title="데이터 백업"
-          subtitle={session ? '지금 클라우드에 저장' : '로그인 필요'}
-          onPress={handleBackup}
-        />
-        <SettingsRow
-          icon="cloud-download-outline"
-          title="백업 복원"
-          subtitle="클라우드에서 불러오기"
-          onPress={handleRestore}
+          icon="pencil-outline"
+          title="카테고리 · 색"
+          subtitle={catSummary}
+          onPress={() => router.push('/categories' as never)}
         />
         <Divider />
         <SettingsRow
-          icon="sync-outline"
-          title="시간표 자동 동기화"
-          subtitle="구글 캘린더 일정을 시간표에 반영"
-          right={<Switch value={syncEnabled} onValueChange={handleAutoSync} {...switchColors} />}
+          icon="play"
+          title="계획 칸 탭하면 바로 집중 시작"
+          subtitle="끄면 상세 시트를 먼저 보여줘요"
+          right={
+            <Toggle value={prefs.tapToFocus} onChange={(v) => updatePrefs({ tapToFocus: v })} />
+          }
+        />
+      </SettingsGroup>
+
+      <SettingsGroup label="집중 · 알림">
+        <SettingsRow
+          icon="stopwatch-outline"
+          title="기본 집중 방식"
+          value={`뽀모도로 ${settings.focusMinutes} · ${settings.breakMinutes}`}
+          onPress={() => router.navigate('/timer' as never)}
+        />
+        <Divider />
+        <SettingsRow
+          icon="notifications-outline"
+          title="알림 설정"
+          subtitle="소리 · 휴식 초과 잔소리"
+          onPress={() => router.push('/notifications' as never)}
+        />
+        <Divider />
+        <SettingsRow
+          icon="book-outline"
+          title="하루 마감 알림"
+          subtitle={`매일 ${prefs.dailyHour}:00에 오늘 집중률 요약`}
+          right={<Toggle value={reviewAlert} onChange={handleReviewAlert} />}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup label="표시">
+        <SettingsRow
+          icon="moon-outline"
+          title="다크 모드"
+          right={<Toggle value={isDark} onChange={setDark} />}
         />
       </SettingsGroup>
 
       <SettingsGroup label="데이터">
         <SettingsRow
           icon="cloud-upload-outline"
-          title="백업·동기화"
-          subtitle="클라우드에 자동 저장"
-          right={<Ionicons name="chevron-forward" size={18} color={theme.faint} />}
-          onPress={() => {}}
+          title="백업 · 동기화"
+          subtitle={session ? (session.user.email ?? '로그인됨') : '이 기기에만 저장 중'}
+          onPress={() => router.push('/backup' as never)}
         />
         <Divider />
         <SettingsRow
           icon="trash-outline"
-          iconColor={theme.red}
           title="데이터 초기화"
-          titleColor={theme.red}
-          subtitle="모든 일정과 할 일을 삭제합니다"
-          right={<Ionicons name="chevron-forward" size={18} color={theme.faint} />}
+          subtitle="모든 기록과 할 일을 삭제합니다"
+          danger
           onPress={handleReset}
         />
       </SettingsGroup>
 
-      <SettingsGroup label="표시">
+      <SettingsGroup label="연동 (선택)">
         <SettingsRow
-          icon="time-outline"
-          title="시간표 범위"
-          right={<Text style={styles.valueText}>06:00 - 24:00</Text>}
-        />
-        <Divider />
-        <SettingsRow
-          icon="moon-outline"
-          title="다크 모드"
-          right={<Switch value={isDark} onValueChange={setDark} {...switchColors} />}
+          icon="logo-google"
+          title="Google 캘린더 일정 읽어오기"
+          subtitle={
+            session
+              ? `${session.user.email ?? '연결됨'} · 일정이 타임테이블에 표시돼요`
+              : '연결하면 오늘 일정이 타임테이블에 연하게 표시돼요'
+          }
+          right={
+            <Pressable style={styles.connectBtn} onPress={handleGoogle}>
+              <Text style={styles.connectText}>{session ? '해제' : '연결'}</Text>
+            </Pressable>
+          }
         />
       </SettingsGroup>
 
-      <SettingsGroup label="알림">
+      <SettingsGroup label="정보">
         <SettingsRow
-          icon="notifications-outline"
-          title="알림 방식"
-          right={<AlertModeSegments value={alertMode} onChange={handleAlertMode} />}
-        />
-        <Divider />
-        <SettingsRow
-          icon="journal-outline"
-          title="저녁 회고 알림"
-          subtitle="매일 저녁 하루를 되돌아봐요"
-          right={<Switch value={reviewAlert} onValueChange={handleReviewAlert} {...switchColors} />}
+          icon="information-circle-outline"
+          title="버전"
+          value={Constants.expoConfig?.version ?? '-'}
         />
       </SettingsGroup>
     </PlannerScreen>
   );
 }
 
-function SettingsGroup({ label, children }: { label: string; children: ReactNode }) {
-  const theme = useTheme();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
-  return (
-    <View style={styles.group}>
-      <Text style={styles.groupLabel}>{label}</Text>
-      <PlannerCard style={styles.groupCard}>{children}</PlannerCard>
-    </View>
-  );
-}
-
-function Divider() {
-  const theme = useTheme();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
-  return <View style={styles.divider} />;
-}
-
-function SettingsRow({
-  icon,
-  iconColor,
-  title,
-  titleColor,
-  subtitle,
-  right,
-  onPress,
-}: {
-  icon: IoniconName;
-  iconColor?: string;
-  title: string;
-  titleColor?: string;
-  subtitle?: string;
-  right?: ReactNode;
-  onPress?: () => void;
-}) {
-  const theme = useTheme();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
-  const ic = iconColor ?? theme.accent;
-  const tc = titleColor ?? theme.ink;
-  const content = (
-    <>
-      <Ionicons name={icon} size={20} color={ic} style={styles.rowIcon} />
-      <View style={styles.rowTextCol}>
-        <Text style={[styles.rowTitle, { color: tc }]}>{title}</Text>
-        {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
-      </View>
-      {right}
-    </>
-  );
-
-  if (onPress) {
-    return (
-      <Pressable
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-        onPress={onPress}>
-        {content}
-      </Pressable>
-    );
-  }
-
-  return <View style={styles.row}>{content}</View>;
-}
-
-function AlertModeSegments({
-  value,
-  onChange,
-}: {
-  value: AlertMode;
-  onChange: (mode: AlertMode) => void;
-}) {
-  const theme = useTheme();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
-  return (
-    <View style={styles.segments}>
-      {ALERT_MODES.map((mode) => {
-        const selected = mode.key === value;
-        return (
-          <Pressable
-            key={mode.key}
-            style={[styles.segment, selected && styles.segmentSelected]}
-            onPress={() => onChange(mode.key)}
-            hitSlop={4}>
-            <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
-              {mode.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 const makeStyles = (theme: AppTheme) =>
   StyleSheet.create({
-  title: {
-    color: theme.ink,
-    fontFamily: PlannerSerif,
-    fontSize: 28,
-    fontWeight: '600',
-    paddingHorizontal: Spacing.one,
-  },
-  group: {
-    gap: Spacing.two,
-  },
-  groupLabel: {
-    color: theme.faint,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    paddingHorizontal: Spacing.one,
-  },
-  groupCard: {
-    padding: 0,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth * 2,
-    backgroundColor: theme.line,
-    marginLeft: Spacing.three + 20 + Spacing.three, // align past the icon column
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
-  },
-  rowPressed: {
-    opacity: 0.6,
-  },
-  rowIcon: {
-    width: 20,
-  },
-  rowTextCol: {
-    flex: 1,
-    gap: 2,
-  },
-  rowTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  rowSubtitle: {
-    color: theme.faint,
-    fontSize: 12.5,
-  },
-  valueText: {
-    color: theme.faint,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  connectedBadge: {
-    backgroundColor: theme.accentSoft,
-    borderRadius: PlannerRadius.chip,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 3,
-  },
-  connectedBadgeText: {
-    color: theme.faint,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  segments: {
-    flexDirection: 'row',
-    backgroundColor: theme.paper,
-    borderRadius: PlannerRadius.chip,
-    padding: 2,
-    gap: 2,
-  },
-  segment: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half + 2,
-    borderRadius: PlannerRadius.chip,
-  },
-  segmentSelected: {
-    backgroundColor: theme.accent,
-  },
-  segmentText: {
-    color: theme.faint,
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-  segmentTextSelected: {
-    color: theme.onAccent,
-  },
-});
+    title: {
+      color: theme.ink,
+      fontFamily: PlannerSerif,
+      fontSize: 28,
+      fontWeight: '600',
+      paddingHorizontal: Spacing.one,
+    },
+    segmentWrap: { paddingBottom: 14 },
+    connectBtn: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: PlannerRadius.md,
+      backgroundColor: theme.surface,
+    },
+    connectText: { ...PlannerType.labelStrong, color: theme.ink },
+  });

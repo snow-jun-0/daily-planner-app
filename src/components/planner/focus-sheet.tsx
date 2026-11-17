@@ -12,6 +12,7 @@ import {
   CELL_MIN,
   COLS,
   FOCUS_CATEGORY,
+  remainingPlanMin,
   type Category,
   type DayTimetable,
   type SubjectId,
@@ -73,10 +74,8 @@ export function FocusSheet({
   let filledMin = 0;
   let rows: number[] = [];
   if (block) {
-    for (let i = block.start; i <= block.end; i++) {
-      if (day.cells[i]?.actual) filledMin += CELL_MIN;
-      else if (i >= nowIdx) remainingMin += CELL_MIN;
-    }
+    remainingMin = remainingPlanMin(day, block, nowIdx);
+    for (let i = block.start; i <= block.end; i++) if (day.cells[i]?.actual) filledMin += CELL_MIN;
     const r0 = Math.floor(block.start / COLS);
     const r1 = Math.floor(block.end / COLS);
     rows = Array.from({ length: r1 - r0 + 1 }, (_, k) => r0 + k);

@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform, Vibration } from 'react-native';
 
-import { getNotifyMode } from './settings';
+import { getNotifyMode, getPrefs } from './settings';
 
 // 앱이 포그라운드일 때도 배너/소리를 띄운다.
 Notifications.setNotificationHandler({
@@ -50,8 +50,9 @@ export async function requestNotifyPermission(): Promise<boolean> {
 
 /** 뽀모도로 단계 종료 알림 — 알림 방식(무음/진동/소리)에 따라 진동/소리 분기 */
 export async function notifyPhaseEnd(wasFocus: boolean): Promise<void> {
-  const mode = await getNotifyMode();
+  const [mode, prefs] = await Promise.all([getNotifyMode(), getPrefs()]);
   if (mode === 'mute') return;
+  if (wasFocus ? !prefs.focusEndAlert : !prefs.breakEndAlert) return;
 
   // 진동 (진동/소리 모드 공통)
   Vibration.vibrate([0, 400, 200, 400]);
@@ -114,8 +115,8 @@ const OVERRUN_IDS = ['overrun-start', 'overrun-10', 'overrun-30', 'overrun-60', 
  * OS 알림을 미리 예약한다. 백그라운드(딴 앱)에서도 뜨도록 미래 시점 예약 방식.
  */
 export async function scheduleOverrunNags(): Promise<void> {
-  const mode = await getNotifyMode();
-  if (mode === 'mute') return;
+  const [mode, prefs] = await Promise.all([getNotifyMode(), getPrefs()]);
+  if (mode === 'mute' || !prefs.nagAlert) return;
   await ensureChannel();
   await cancelOverrunNags();
   const min = 60;

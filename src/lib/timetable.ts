@@ -152,6 +152,17 @@ export async function saveCategories(cats: Category[]): Promise<void> {
   scheduleAutoBackup();
 }
 
+/** 블록에서 아직 안 채운 계획 분 (nowIdx 이전 칸은 지난 것으로 보고 뺀다, 오늘 아니면 -1) */
+export function remainingPlanMin(
+  day: DayTimetable,
+  block: { start: number; end: number },
+  nowIdx: number,
+): number {
+  let n = 0;
+  for (let i = Math.max(block.start, nowIdx); i <= block.end; i++) if (!day.cells[i]?.actual) n++;
+  return n * CELL_MIN;
+}
+
 /** 하루의 계획 블록들 (같은 과목 연속 칸 묶음), 시간순 */
 export function plannedBlocks(day: DayTimetable): { start: number; end: number; subject: SubjectId }[] {
   const out: { start: number; end: number; subject: SubjectId }[] = [];

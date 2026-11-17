@@ -5,6 +5,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { getPrefs } from './settings';
+import { getItem, setItem } from './storage';
 import { supabase } from './supabase';
 
 const BACKUP_PREFIXES = [
@@ -50,7 +52,39 @@ export async function uploadBackup(): Promise<boolean> {
   const { error } = await supabase
     .from('user_backups')
     .upsert({ user_id: uid, data, updated_at: new Date().toISOString() });
+  if (!error) await setItem(LAST_AT_KEY, Date.now());
   return !error;
+}
+
+const LAST_AT_KEY = 'backup:lastAt';
+
+/** 마지막 백업 성공 시각(epoch ms) — 백업 대상 키가 아님 */
+export async function getLastBackupAt(): Promise<number | null> {
+  return getItem<number>(LAST_AT_KEY);
+}
+
+/** 백업 항목별 개수 (설정 화면 표시용) */
+export async function backupCounts(): Promise<Record<string, number>> {
+  const keys = await collectKeys();
+  const pairs = await AsyncStorage.multiGet(keys);
+  const count = (pfx: string) =>
+    pairs
+      .filter(([k]) => k.startsWith(pfx))
+      .reduce((n, [, v]) => {
+        try {
+          const parsed = JSON.parse(v ?? 'null');
+          return n + (Array.isArray(parsed) ? parsed.length : parsed ? 1 : 0);
+        } catch {
+          return n;
+        }
+      }, 0);
+  return {
+    tasks: count('tasks:'),
+    events: count('events:'),
+    memos: count('memo:'),
+    ddays: count('dday:'),
+    timetableDays: keys.filter((k) => k.startsWith('timetable:')).length,
+  };
 }
 
 /** 클라우드 백업을 받아 로컬에 복원. 백업 없으면 false. */
@@ -86,6 +120,6 @@ let autoTimer: ReturnType<typeof setTimeout> | null = null;
 export function scheduleAutoBackup(): void {
   if (autoTimer) clearTimeout(autoTimer);
   autoTimer = setTimeout(() => {
-    void uploadBackup();
+    void getPrefs().then((p) => p.autoBackup && uploadBackup());
   }, 4000);
 }

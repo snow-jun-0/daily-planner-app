@@ -64,6 +64,47 @@ export async function setAutoSyncCalendar(v: boolean): Promise<void> {
   await setItem(K.autoSyncCalendar, v);
 }
 
+/** 화면 설정 묶음 (D5·E6·E7·H1). 새 설정은 여기에 필드만 추가한다. */
+export type Prefs = {
+  /** 드래그로 칠할 때 최소 단위(칸 수): 10분·30분·1시간 */
+  brushCells: 1 | 3 | 6;
+  /** 계획 칸 탭 → 시트 없이 바로 집중 시작 */
+  tapToFocus: boolean;
+  laneMode: 'open' | 'closed' | 'hidden';
+  laneWidth: 56 | 68 | 84;
+  /** 타이머가 새 칸을 채울 때 진동 */
+  hapticOnFill: boolean;
+  focusEndAlert: boolean;
+  breakEndAlert: boolean;
+  /** 휴식 초과 잔소리 알림 */
+  nagAlert: boolean;
+  /** 저녁 회고 알림 시각(시) */
+  dailyHour: number;
+  autoBackup: boolean;
+};
+
+export const DEFAULT_PREFS: Prefs = {
+  brushCells: 1,
+  tapToFocus: false,
+  laneMode: 'open',
+  laneWidth: 56,
+  hapticOnFill: true,
+  focusEndAlert: true,
+  breakEndAlert: true,
+  nagAlert: true,
+  dailyHour: 21,
+  autoBackup: true,
+};
+
+const PREFS_KEY = 'settings:prefs';
+
+export async function getPrefs(): Promise<Prefs> {
+  return { ...DEFAULT_PREFS, ...(await getItem<Partial<Prefs>>(PREFS_KEY)) };
+}
+export async function setPrefs(patch: Partial<Prefs>): Promise<void> {
+  await setItem(PREFS_KEY, { ...(await getPrefs()), ...patch });
+}
+
 /** 이 앱이 쓰는 모든 로컬 데이터 삭제 (v1 resetAllData의 RN 버전) */
 export async function resetAllData(): Promise<void> {
   const keys = await AsyncStorage.getAllKeys();

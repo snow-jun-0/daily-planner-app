@@ -9,6 +9,7 @@ import { cellColor, withAlpha } from '@/components/planner/mini-grid';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
+import { usePrefs } from '@/hooks/use-prefs';
 import { startFocus } from '@/lib/pomodoro';
 import {
   achievementRate,
@@ -21,6 +22,7 @@ import {
   loadCategories,
   loadTimetable,
   plannedBlockAt,
+  remainingPlanMin,
   ROWS,
   START_HOUR,
   subscribeTimetable,
@@ -85,7 +87,10 @@ export function TimetableGrid({
   /** 집중 시트: undefined=닫힘, null=바로 집중, 블록=계획 칸 탭 */
   const [sheet, setSheet] = useState<PlanBlock | null | undefined>(undefined);
   const [editing, setEditing] = useState<{ block: PlanBlock; isNew: boolean } | null>(null);
-  const [laneOpen, setLaneOpen] = useState(true);
+  const [prefs] = usePrefs();
+  /** 사용자가 탭으로 레인을 접었다/폈다 한 값 — 없으면 설정의 기본 상태 */
+  const [laneToggled, setLaneToggled] = useState<boolean | null>(null);
+  const laneOpen = laneToggled ?? prefs.laneMode === 'open';
   const [mode, setMode] = useState<'day' | 'week'>('day');
 
   const dayRef = useRef<DayTimetable | null>(null);
@@ -96,8 +101,22 @@ export function TimetableGrid({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapIdx = useRef(-1); // 계획 칸에서 시작한 터치 — 움직이지 않고 떼면 시트를 연다
   const moved = useRef(false);
+  const prefsRef = useRef(prefs);
+  /** 계획 칸 탭 처리 — 최신 props/설정을 쓰도록 매 렌더 갱신 */
+  const onTapPlanned = useRef<(block: PlanBlock) => void>(() => {});
   activeCatRef.current = activeCat;
   eraseRef.current = erase;
+  prefsRef.current = prefs;
+  onTapPlanned.current = (block) => {
+    const d = dayRef.current;
+    if (!prefs.tapToFocus || !d) {
+      setSheet(block);
+      return;
+    }
+    const nowIdx = isToday ? dateToCellIndex(new Date()) : -1;
+    startFocus(block.subject, remainingPlanMin(d, block, nowIdx) || undefined);
+    onStartFocus?.();
+  };
 
   useEffect(() => {
     let alive = true;
@@ -152,15 +171,23 @@ export function TimetableGrid({
     }, 400);
   }
 
+  /** idx가 속한 격자 단위(10분/30분/1시간) 묶음을 칠한다 */
   function paintIndex(idx: number) {
     const d = dayRef.current;
-    if (!d || idx < 0 || idx >= d.cells.length || painted.current.has(idx)) return;
-    painted.current.add(idx);
+    if (!d || idx < 0 || idx >= d.cells.length) return;
+    const n = prefsRef.current.brushCells;
+    const base = idx - (idx % n);
+    const targets: number[] = [];
+    for (let i = base; i < Math.min(base + n, d.cells.length); i++)
+      if (!painted.current.has(i)) targets.push(i);
+    if (!targets.length) return;
     const cells = d.cells.slice();
-    const cur = cells[idx] ?? {};
-    cells[idx] = eraseRef.current
-      ? { ...cur, planned: undefined }
-      : { ...cur, planned: activeCatRef.current };
+    for (const i of targets) {
+      painted.current.add(i);
+      cells[i] = eraseRef.current
+        ? { ...cells[i], planned: undefined }
+        : { ...cells[i], planned: activeCatRef.current };
+    }
     persist({ ...d, cells });
   }
 
@@ -198,7 +225,8 @@ export function TimetableGrid({
       onPanResponderRelease: () => {
         painted.current.clear();
         const d = dayRef.current;
-        if (tapIdx.current >= 0 && !moved.current && d) setSheet(plannedBlockAt(d, tapIdx.current));
+        const block = tapIdx.current >= 0 && !moved.current && d ? plannedBlockAt(d, tapIdx.current) : null;
+        if (block) onTapPlanned.current(block);
         tapIdx.current = -1;
       },
       onPanResponderTerminate: () => {
@@ -287,7 +315,7 @@ export function TimetableGrid({
   }
 
   // 일정 레인: 격자 범위로 자른 일정들 + 일정이 걸친 칸
-  const lane = events
+  const lane = (prefs.laneMode === 'hidden' ? [] : events)
     .map((e) => ({
       ...e,
       top: Math.max(0, toGridMin(e.start)),
@@ -378,7 +406,11 @@ export function TimetableGrid({
       <View style={styles.colHeadRow}>
         <View style={styles.axis} />
         {lane.length ? (
-          <Text style={[styles.colHead, laneOpen ? styles.laneOpen : styles.laneClosed]}>
+          <Text
+            style={[
+              styles.colHead,
+              laneOpen ? [styles.laneOpen, { width: prefs.laneWidth }] : styles.laneClosed,
+            ]}>
             {laneOpen ? '일정' : ''}
           </Text>
         ) : null}
@@ -401,8 +433,8 @@ export function TimetableGrid({
         </View>
         {lane.length ? (
           <Pressable
-            style={laneOpen ? styles.laneOpen : styles.laneClosed}
-            onPress={() => setLaneOpen((v) => !v)}
+            style={laneOpen ? [styles.laneOpen, { width: prefs.laneWidth }] : styles.laneClosed}
+            onPress={() => setLaneToggled(!laneOpen)}
             accessibilityLabel={laneOpen ? '일정 레인 접기' : '일정 레인 펼치기'}>
             {lane.map((e) => (
               <View
