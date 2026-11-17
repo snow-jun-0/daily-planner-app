@@ -2,6 +2,7 @@
 // 하루 = 06:00 ~ 익일 02:00 (03~05시는 데드존). 10분 칸 120개.
 // 새벽 00~02시 기록은 '전날' 타임테이블에 속한다 (06시 기준으로 하루 구분).
 
+import { scheduleAutoBackup } from './backup';
 import { getItem, setItem } from './storage';
 
 export type SubjectId = string;
@@ -92,6 +93,7 @@ export async function loadTimetable(dateKey: string): Promise<DayTimetable> {
 
 export async function saveTimetable(dateKey: string, day: DayTimetable): Promise<void> {
   await setItem(`${TT_PREFIX}${dateKey}`, day);
+  scheduleAutoBackup();
 }
 
 const ttListeners = new Set<(dateKey: string) => void>();
@@ -147,6 +149,7 @@ export async function loadCategories(): Promise<Category[]> {
 
 export async function saveCategories(cats: Category[]): Promise<void> {
   await setItem(CAT_KEY, cats);
+  scheduleAutoBackup();
 }
 
 /** 하루의 계획 블록들 (같은 과목 연속 칸 묶음), 시간순 */

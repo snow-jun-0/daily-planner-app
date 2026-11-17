@@ -7,7 +7,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { supabase } from './supabase';
 
-const BACKUP_PREFIXES = ['tasks:', 'events:', 'memo:', 'dday:', 'stats:', 'pomodoro:', 'settings:'];
+const BACKUP_PREFIXES = [
+  'tasks:',
+  'events:',
+  'memo:',
+  'dday:',
+  'stats:',
+  'pomodoro:',
+  'settings:',
+  'timetable:',
+  'categories',
+];
 
 async function collectKeys(): Promise<string[]> {
   const all = await AsyncStorage.getAllKeys();
@@ -61,7 +71,11 @@ export async function restoreFromCloud(): Promise<boolean> {
 export async function maybeRestoreOnLogin(): Promise<boolean> {
   const keys = await collectKeys();
   const hasData = keys.some(
-    (k) => k.startsWith('tasks:') || k.startsWith('events:') || k.startsWith('dday:'),
+    (k) =>
+      k.startsWith('tasks:') ||
+      k.startsWith('events:') ||
+      k.startsWith('dday:') ||
+      k.startsWith('timetable:'),
   );
   if (hasData) return false;
   return restoreFromCloud();
