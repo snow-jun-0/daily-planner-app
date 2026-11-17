@@ -12,7 +12,7 @@ import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
 import { usePrefs } from '@/hooks/use-prefs';
-import { startFocus } from '@/lib/pomodoro';
+import { getState as getPomodoroState, startFocus, subscribe as subscribePomodoro } from '@/lib/pomodoro';
 import {
   achievementRate,
   actualByCategory,
@@ -21,6 +21,7 @@ import {
   CELL_COUNT,
   CELL_MIN,
   cellLabel,
+  cellToMinutes,
   COLS,
   dateToCellIndex,
   FOCUS_CATEGORY,
@@ -132,6 +133,18 @@ export function TimetableGrid({
     startFocus(block.subject, remainingPlanMin(d, block, nowIdx) || undefined);
     onStartFocus?.();
   };
+
+  // 집중 타이머 진행을 실시간 반영 (현재 칸을 비율로 채우기)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    const unsub = subscribePomodoro(bump);
+    const iv = setInterval(bump, 1000);
+    return () => {
+      unsub();
+      clearInterval(iv);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -349,6 +362,23 @@ export function TimetableGrid({
   const byCat = actualByCategory(day);
   const nowIdx = isToday ? dateToCellIndex(new Date()) : -1;
   const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
+
+  // 집중 중이면 '지금 칸'을 경과 비율만큼 채운다 (1분=10%)
+  let fillIdx = -1;
+  let fillRatio = 0;
+  let fillColor = '';
+  if (isToday && nowIdx >= 0 && !day.cells[nowIdx]?.actual) {
+    const pomo = getPomodoroState();
+    if (pomo.status === 'running' && pomo.phase === 'focus') {
+      const now = new Date();
+      let h = now.getHours();
+      if (h < START_HOUR) h += 24;
+      const nowMin = h * 60 + now.getMinutes() + now.getSeconds() / 60;
+      fillRatio = Math.min(1, Math.max(0, (nowMin - cellToMinutes(nowIdx)) / CELL_MIN));
+      fillIdx = nowIdx;
+      fillColor = catMap[pomo.focusSubject]?.color ?? FOCUS_CATEGORY.color;
+    }
+  }
   const [yy, mm, dd] = dateKey.split('-').map(Number);
   const weekday = (new Date(yy, mm - 1, dd).getDay() + 6) % 7; // 월요일=0
   const goalH = prefs.goalHours[weekday] ?? 0;
@@ -584,6 +614,18 @@ export function TimetableGrid({
                             : cellColor(day.cells[idx] ?? {}, catMap, theme),
                       },
                     ]}>
+                    {idx === fillIdx ? (
+                      <View
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: `${fillRatio * 100}%`,
+                          backgroundColor: fillColor,
+                        }}
+                      />
+                    ) : null}
                     {label ? (
                       <Text
                         style={[

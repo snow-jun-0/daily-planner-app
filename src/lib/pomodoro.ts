@@ -105,20 +105,25 @@ const filled = new Set<string>();
 /** fillFrom ~ until 사이 칸들을 오늘 타임테이블 actual로 마킹. 새 칸이 생길 때만 저장(≈10분 1회). */
 function fillActual(until: number): void {
   if (fillFrom == null) return;
+  // 지금 진행 중인 칸(아직 10분이 안 찬 칸)은 저장하지 않는다 — 격자의 비율 오버레이가 담당한다.
+  const d0 = new Date(until);
+  d0.setMinutes(d0.getMinutes() - (d0.getMinutes() % CELL_MIN), 0, 0);
+  const cutoff = d0.getTime(); // 현재 칸의 시작 시각 = 완료된 칸까지의 경계
+  if (cutoff <= fillFrom) return; // 아직 한 칸도 완료되지 않음
   const firstFill = filled.size === 0;
   const byDate = new Map<string, number[]>();
   // 칸 크기 간격으로 걸으므로 백그라운드였던 구간도 빠짐없이 채운다
-  for (let t = fillFrom; ; t = Math.min(t + CELL_MIN * 60_000, until)) {
+  for (let t = fillFrom; ; t = Math.min(t + CELL_MIN * 60_000, cutoff)) {
     const d = new Date(t);
-    const idx = dateToCellIndex(d); // ponytail: 02~06시 집중은 버림, overflowMin 집계는 필요할 때
+    const idx = dateToCellIndex(d);
     const dk = timetableDateKey(d);
     if (idx >= 0 && !filled.has(`${dk}:${idx}`)) {
       filled.add(`${dk}:${idx}`);
       byDate.set(dk, [...(byDate.get(dk) ?? []), idx]);
     }
-    if (t >= until) break;
+    if (t >= cutoff) break;
   }
-  fillFrom = until;
+  fillFrom = cutoff;
   // 시작 직후 첫 칸 말고, 새 칸으로 넘어갈 때만 진동
   if (byDate.size && !firstFill)
     void getPrefs().then((p) => {
@@ -137,6 +142,20 @@ function fillActual(until: number): void {
 /** 실행 중 구간을 마저 채우고 채우기를 멈춘다 */
 function stopFilling(until = Date.now()): void {
   fillActual(until);
+  // 종료 시점에 진행 중이던 칸도 (부분 집중이라도) 1칸으로 기록한다
+  if (fillFrom != null) {
+    const idx = dateToCellIndex(new Date(until));
+    const dk = timetableDateKey(new Date(until));
+    if (idx >= 0 && !filled.has(`${dk}:${idx}`)) {
+      filled.add(`${dk}:${idx}`);
+      const subject = state.focusSubject;
+      void updateTimetable(dk, (day) => {
+        const cells = day.cells.slice();
+        cells[idx] = { ...cells[idx], actual: subject };
+        return { ...day, cells };
+      });
+    }
+  }
   fillFrom = null;
 }
 
