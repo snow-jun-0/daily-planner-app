@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DayHeader } from '@/components/planner/day-header';
 import { MemoCard } from '@/components/planner/memo-card';
-import { ScheduleCard } from '@/components/planner/schedule-card';
+import { TimetableGrid } from '@/components/planner/timetable-grid';
 import { DDayModal } from '@/components/planner/dday-modal';
 import { TodaySummaryCard, type DDayItem } from '@/components/planner/today-summary-card';
 import { TodoCard } from '@/components/planner/todo-card';
@@ -215,12 +215,10 @@ export default function DailyScreen() {
 
           <TodaySummaryCard progress={progress} ddays={ddays} onManage={() => setDdayModal(true)} />
 
-          <ScheduleCard
-            startHour={6}
-            endHour={24}
-            events={events}
-            onAdd={handleAddEvent}
-            onDelete={handleDeleteEvent}
+          <TimetableGrid
+            dateKey={viewDate}
+            isToday={isToday}
+            onStartFocus={() => router.push('/timer' as never)}
           />
 
           <TodoCard

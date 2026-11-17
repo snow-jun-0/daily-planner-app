@@ -21,3 +21,7 @@ create policy "own update" on public.google_tokens
 -- authenticated 역할에 테이블 접근 권한 부여 (RLS 정책은 그 위에서 행 단위로 제한).
 -- SQL Editor로 만든 테이블은 이 grant가 자동으로 안 붙는 경우가 있어 명시한다.
 grant select, insert, update, delete on public.google_tokens to authenticated;
+
+-- Edge Function은 service_role 로 저장/조회하므로 service_role 에도 권한을 명시한다.
+-- (SQL Editor로 만든 테이블은 이 grant가 자동으로 안 붙어 permission denied 가 날 수 있다)
+grant select, insert, update, delete on public.google_tokens to service_role;
