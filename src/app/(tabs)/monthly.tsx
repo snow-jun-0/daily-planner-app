@@ -1,116 +1,118 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { withAlpha } from '@/components/planner/mini-grid';
 import { PlannerCard } from '@/components/planner/planner-card';
 import { PlannerScreen } from '@/components/planner/planner-screen';
-import { PlannerRadius, PlannerSerif, Spacing } from '@/constants/theme';
 import type { AppTheme } from '@/constants/theme';
+import { PlannerRadius, PlannerType, Spacing } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
-import { loadMonthDots, type DotColor, type MonthDots } from '@/lib/calendar';
 import { todayKey } from '@/lib/date';
-import { formatDisplayDate } from '@/lib/date';
-import { loadEvents, type Event } from '@/lib/events';
 import { requestViewDate } from '@/lib/navigation';
+import * as pomodoro from '@/lib/pomodoro';
 import { loadTasks, type Task } from '@/lib/tasks';
+import {
+  achievementRate,
+  actualByCategory,
+  cellLabel,
+  CELL_MIN,
+  dateToCellIndex,
+  FOCUS_CATEGORY,
+  loadCategories,
+  loadTimetable,
+  plannedBlocks,
+  totalActualMin,
+  totalPlannedMin,
+  type Category,
+  type DayTimetable,
+  type SubjectId,
+} from '@/lib/timetable';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-const dotColor = (theme: AppTheme): Record<DotColor, string> => ({
-  highlight: theme.highlight,
-  green: theme.green,
-  blue: theme.blue,
-  red: theme.red,
-  sage: theme.sage,
-  task: theme.accent,
-});
-
-type DayCell = {
-  day: number;
-  inMonth: boolean;
-  dateKey?: string;
-  isToday?: boolean;
-  dots?: DotColor[];
-};
+type DayCell = { day: number; inMonth: boolean; dateKey?: string };
 
 function pad(n: number) {
   return String(n).padStart(2, '0');
 }
 
-function dateKeyFor(year: number, month: number, day: number) {
-  return `${year}-${pad(month)}-${pad(day)}`;
-}
-
-function buildMonthGrid(year: number, month: number, dots: MonthDots, today: string): DayCell[] {
+function buildMonthGrid(year: number, month: number): DayCell[] {
   const cells: DayCell[] = [];
-
   const firstWeekday = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
   const prevMonthDays = new Date(year, month - 1, 0).getDate();
-
-  for (let i = 0; i < firstWeekday; i++) {
+  for (let i = 0; i < firstWeekday; i++)
     cells.push({ day: prevMonthDays - firstWeekday + 1 + i, inMonth: false });
-  }
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    const key = dateKeyFor(year, month, day);
-    cells.push({ day, inMonth: true, dateKey: key, isToday: key === today, dots: dots[key] });
-  }
-
-  let nextMonthDay = 1;
-  while (cells.length < 42) {
-    cells.push({ day: nextMonthDay++, inMonth: false });
-  }
-
+  for (let day = 1; day <= daysInMonth; day++)
+    cells.push({ day, inMonth: true, dateKey: `${year}-${pad(month)}-${pad(day)}` });
+  // 마지막 주까지만 채운다 (6주 고정 X)
+  let next = 1;
+  while (cells.length % 7) cells.push({ day: next++, inMonth: false });
   return cells;
+}
+
+/** 하루 집중률 — 계획 대비 달성률, 계획 없이 집중만 했으면 꽉 찬 막대 */
+function dayRate(d: DayTimetable): number {
+  if (totalPlannedMin(d)) return achievementRate(d);
+  return totalActualMin(d) ? 1 : 0;
+}
+
+function fmtTotal(min: number): string {
+  return `${Math.floor(min / 60)}H ${pad(min % 60)}M`;
 }
 
 export default function MonthlyScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
+  const timer = useSyncExternalStore(pomodoro.subscribe, pomodoro.getState, pomodoro.getState);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [dots, setDots] = useState<MonthDots>({});
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ events: Event[]; tasks: Task[] } | null>(null);
+  const [days, setDays] = useState<Record<string, DayTimetable>>({});
+  const [cats, setCats] = useState<Category[]>([FOCUS_CATEGORY]);
   const today = todayKey();
+  const [selected, setSelected] = useState(today);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
-  // reload dots whenever the visible month changes, and whenever this tab
-  // regains focus (so a task/event just added on 오늘 shows up without a
-  // full app restart)
+  const grid = useMemo(() => buildMonthGrid(year, month), [year, month]);
+
+  // 탭에 돌아올 때마다 다시 읽는다 (오늘 화면에서 칠한 계획/집중 반영)
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      loadMonthDots(year, month).then((loaded) => {
-        if (!cancelled) setDots(loaded);
+      const keys = grid.filter((c) => c.dateKey).map((c) => c.dateKey!);
+      void Promise.all(keys.map(loadTimetable)).then((list) => {
+        if (!cancelled) setDays(Object.fromEntries(keys.map((k, i) => [k, list[i]])));
       });
+      void loadCategories().then((c) => !cancelled && setCats(c));
       return () => {
         cancelled = true;
       };
-    }, [year, month]),
+    }, [grid]),
   );
 
-  const grid = useMemo(() => buildMonthGrid(year, month, dots, today), [year, month, dots, today]);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void loadTasks(selected).then((t) => !cancelled && setTasks(t));
+      return () => {
+        cancelled = true;
+      };
+    }, [selected]),
+  );
 
-  function handlePrevMonth() {
-    if (month === 1) {
-      setYear(year - 1);
-      setMonth(12);
-    } else {
-      setMonth(month - 1);
-    }
-  }
+  const catMap = useMemo(
+    () => Object.fromEntries(cats.map((c) => [c.id, c])) as Record<SubjectId, Category>,
+    [cats],
+  );
 
-  function handleNextMonth() {
-    if (month === 12) {
-      setYear(year + 1);
-      setMonth(1);
-    } else {
-      setMonth(month + 1);
-    }
+  function shiftMonth(delta: number) {
+    const d = new Date(year, month - 1 + delta, 1);
+    setYear(d.getFullYear());
+    setMonth(d.getMonth() + 1);
   }
 
   function openDay(dateKey: string) {
@@ -118,34 +120,44 @@ export default function MonthlyScreen() {
     router.navigate('/');
   }
 
-  function handleDayPress(dateKey: string) {
-    if (selectedDate === dateKey) {
-      openDay(dateKey);
-    } else {
-      setSelectedDate(dateKey);
-      void Promise.all([loadEvents(dateKey), loadTasks(dateKey)]).then(([e, t]) =>
-        setPreview({ events: e, tasks: t }),
-      );
-    }
-  }
+  const sel = days[selected];
+  const selDate = new Date(Number(selected.slice(0, 4)), Number(selected.slice(5, 7)) - 1, Number(selected.slice(8)));
+  const blocks = sel ? plannedBlocks(sel) : [];
+  const nowIdx = selected === today ? dateToCellIndex(now) : -1;
+
+  // 과목별 막대: 계획(연한 색) 위에 실제(진한 색)
+  const stripe = (() => {
+    if (!sel) return [];
+    const actual = actualByCategory(sel);
+    const planned: Record<SubjectId, number> = {};
+    for (const c of sel.cells) if (c.planned) planned[c.planned] = (planned[c.planned] ?? 0) + CELL_MIN;
+    const ids = Array.from(new Set([...Object.keys(planned), ...Object.keys(actual)]));
+    return ids.map((id) => {
+      const total = Math.max(planned[id] ?? 0, actual[id] ?? 0);
+      return { id, total, ratio: (actual[id] ?? 0) / total };
+    });
+  })();
 
   return (
     <PlannerScreen>
       <View style={styles.headerRow}>
         <View style={styles.selectors}>
-          <Pressable onPress={handlePrevMonth} hitSlop={10} style={styles.navBtn}>
+          <Pressable onPress={() => shiftMonth(-1)} hitSlop={10} style={styles.navBtn}>
             <Ionicons name="chevron-back" size={20} color={theme.ink} />
           </Pressable>
           <Text style={styles.selectorText}>
             {year}년 {month}월
           </Text>
-          <Pressable onPress={handleNextMonth} hitSlop={10} style={styles.navBtn}>
+          <Pressable onPress={() => shiftMonth(1)} hitSlop={10} style={styles.navBtn}>
             <Ionicons name="chevron-forward" size={20} color={theme.ink} />
           </Pressable>
         </View>
-
-        <Pressable style={styles.statsBtn} hitSlop={8} onPress={() => router.push('/stats' as never)}>
-          <Ionicons name="bar-chart-outline" size={18} color={theme.accent} />
+        <Pressable
+          style={styles.statsBtn}
+          hitSlop={8}
+          onPress={() => router.push('/stats' as never)}
+          accessibilityLabel="통계">
+          <Ionicons name="bar-chart-outline" size={18} color={theme.ink} />
         </Pressable>
       </View>
 
@@ -154,11 +166,7 @@ export default function MonthlyScreen() {
           {WEEKDAYS.map((label, i) => (
             <Text
               key={label}
-              style={[
-                styles.weekdayText,
-                i === 0 && styles.sunText,
-                i === 6 && styles.satText,
-              ]}>
+              style={[styles.weekdayText, i === 0 && styles.sunText, i === 6 && styles.satText]}>
               {label}
             </Text>
           ))}
@@ -167,53 +175,44 @@ export default function MonthlyScreen() {
         <View style={styles.grid}>
           {grid.map((cell, i) => {
             const col = i % 7;
-            const dayColor = !cell.inMonth
-              ? theme.faint
+            const isToday = cell.dateKey === today;
+            const color = !cell.inMonth
+              ? theme.textTertiary
               : col === 0
                 ? theme.red
                 : col === 6
                   ? theme.blue
                   : theme.ink;
-
-            const content = (
-              <>
-                {cell.isToday ? (
-                  <View style={styles.todayBadge}>
-                    <Text style={styles.todayText}>{cell.day}</Text>
-                  </View>
-                ) : (
-                  <Text
-                    style={[styles.dayText, { color: dayColor }, !cell.inMonth && styles.outOfMonth]}>
-                    {cell.day}
-                  </Text>
-                )}
-
-                <View style={styles.dotRow}>
-                  {cell.dots?.map((color, di) => (
-                    <View key={di} style={[styles.dot, { backgroundColor: dotColor(theme)[color] }]} />
-                  ))}
-                </View>
-              </>
-            );
-
-            if (!cell.inMonth || !cell.dateKey) {
-              return (
-                <View key={i} style={styles.cell}>
-                  {content}
-                </View>
-              );
-            }
-
+            const d = cell.dateKey ? days[cell.dateKey] : undefined;
+            const hasActual = d ? totalActualMin(d) > 0 : false;
+            const hasPlan = d ? totalPlannedMin(d) > 0 : false;
             return (
               <Pressable
                 key={i}
-                style={({ pressed }) => [
-                  styles.cell,
-                  pressed && styles.cellPressed,
-                  cell.dateKey === selectedDate && styles.cellSelected,
-                ]}
-                onPress={() => handleDayPress(cell.dateKey!)}>
-                {content}
+                disabled={!cell.dateKey}
+                style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+                onPress={() =>
+                  cell.dateKey === selected ? openDay(selected) : setSelected(cell.dateKey!)
+                }>
+                <View
+                  style={[
+                    styles.dayBadge,
+                    isToday && styles.todayBadge,
+                    !isToday && cell.dateKey === selected && styles.selectedBadge,
+                  ]}>
+                  <Text style={[styles.dayText, { color: isToday ? theme.onAccent : color }]}>
+                    {cell.day}
+                  </Text>
+                </View>
+                {hasActual ? (
+                  <View style={styles.rateTrack}>
+                    <View style={[styles.rateFill, { width: `${dayRate(d!) * 100}%` }]} />
+                  </View>
+                ) : hasPlan ? (
+                  <View style={styles.planDot} />
+                ) : (
+                  <View style={styles.markerSpace} />
+                )}
               </Pressable>
             );
           })}
@@ -221,30 +220,81 @@ export default function MonthlyScreen() {
 
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: theme.blue }]} />
-            <Text style={styles.legendText}>일정</Text>
+            <View style={styles.rateTrack}>
+              <View style={[styles.rateFill, { width: '70%' }]} />
+            </View>
+            <Text style={styles.legendText}>하루 집중률</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: theme.green }]} />
-            <Text style={styles.legendText}>할 일</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: theme.amber }]} />
-            <Text style={styles.legendText}>메모</Text>
+            <View style={styles.planDot} />
+            <Text style={styles.legendText}>계획 있음</Text>
           </View>
         </View>
       </PlannerCard>
 
-      {selectedDate && preview ? (
-        <Pressable style={styles.previewCard} onPress={() => openDay(selectedDate)}>
+      {sel ? (
+        <PlannerCard style={styles.previewCard}>
           <View style={styles.previewHeader}>
-            <Text style={styles.previewDate}>{formatDisplayDate(selectedDate)}</Text>
-            <Text style={styles.previewOpen}>열기 →</Text>
+            <Text style={styles.previewDate}>
+              {selDate.getMonth() + 1}월 {selDate.getDate()}일 {WEEKDAYS[selDate.getDay()]}요일
+            </Text>
+            {selected === today ? (
+              <View style={styles.todayChip}>
+                <Text style={styles.todayChipText}>오늘</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={styles.previewSummary}>
-            일정 {preview.events.length}개 · 할일 {preview.tasks.length}개
+            TOTAL {fmtTotal(totalActualMin(sel))}
+            {totalPlannedMin(sel) ? ` · 달성 ${Math.round(achievementRate(sel) * 100)}%` : ''}
+            {tasks.length ? ` · 할 일 ${tasks.filter((t) => t.done).length}/${tasks.length}` : ''}
           </Text>
-        </Pressable>
+
+          {stripe.length ? (
+            <View style={styles.stripe}>
+              {stripe.map((s) => {
+                const c = catMap[s.id]?.color ?? FOCUS_CATEGORY.color;
+                return (
+                  <View
+                    key={s.id}
+                    style={[styles.stripeSeg, { flex: s.total, backgroundColor: withAlpha(c, 0.25) }]}>
+                    <View style={{ width: `${s.ratio * 100}%`, backgroundColor: c }} />
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {blocks.map((b) => {
+            const cat = catMap[b.subject] ?? FOCUS_CATEGORY;
+            const focusing =
+              timer.status === 'running' &&
+              timer.phase === 'focus' &&
+              timer.focusSubject === b.subject &&
+              nowIdx >= b.start &&
+              nowIdx <= b.end;
+            return (
+              <View key={b.start} style={styles.blockRow}>
+                <View style={[styles.blockDot, { backgroundColor: cat.color }]} />
+                <Text style={styles.blockName} numberOfLines={1}>
+                  {cat.name}
+                </Text>
+                <Text style={styles.blockTime}>
+                  {cellLabel(b.start)} – {cellLabel(b.end + 1)}
+                </Text>
+                {focusing ? (
+                  <View style={styles.focusChip}>
+                    <Text style={styles.focusChipText}>집중 중</Text>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+
+          <Pressable style={styles.openBtn} onPress={() => openDay(selected)}>
+            <Text style={styles.openBtnText}>이 날짜 열기</Text>
+          </Pressable>
+        </PlannerCard>
       ) : null}
     </PlannerScreen>
   );
@@ -252,127 +302,98 @@ export default function MonthlyScreen() {
 
 const makeStyles = (theme: AppTheme) =>
   StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.one,
-  },
-  selectors: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  navBtn: {
-    padding: Spacing.one,
-  },
-  selectorText: {
-    color: theme.ink,
-    fontFamily: PlannerSerif,
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  statsBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: PlannerRadius.chip,
-    backgroundColor: theme.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cellSelected: {
-    backgroundColor: theme.accentSoft,
-    borderRadius: PlannerRadius.block,
-  },
-  previewCard: {
-    backgroundColor: theme.card,
-    borderRadius: PlannerRadius.card,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: theme.line,
-    padding: Spacing.three,
-    marginTop: Spacing.three,
-    gap: Spacing.one,
-  },
-  previewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  previewDate: { color: theme.ink, fontSize: 15, fontWeight: '700' },
-  previewOpen: { color: theme.accent, fontSize: 13, fontWeight: '600' },
-  previewSummary: { color: theme.faint, fontSize: 13 },
-  legendRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.three,
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.one,
-  },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendDot: { width: 6, height: 6, borderRadius: 3 },
-  legendText: { color: theme.textSecondary, fontSize: 11 },
-  calendarCard: {
-    padding: Spacing.two,
-  },
-  weekdayRow: {
-    flexDirection: 'row',
-    paddingVertical: Spacing.two,
-  },
-  weekdayText: {
-    flexBasis: `${100 / 7}%`,
-    textAlign: 'center',
-    color: theme.faint,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  sunText: {
-    color: theme.red,
-  },
-  satText: {
-    color: theme.blue,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  cell: {
-    flexBasis: `${100 / 7}%`,
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  cellPressed: {
-    opacity: 0.6,
-  },
-  dayText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  outOfMonth: {
-    opacity: 0.45,
-  },
-  todayBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: PlannerRadius.chip,
-    backgroundColor: theme.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  todayText: {
-    color: theme.onAccent,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  dotRow: {
-    flexDirection: 'row',
-    gap: 3,
-    height: 5,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: PlannerRadius.chip,
-  },
-});
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: Spacing.one,
+    },
+    selectors: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+    navBtn: { padding: Spacing.one },
+    selectorText: { ...PlannerType.display, fontSize: 26, color: theme.ink },
+    statsBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: PlannerRadius.chip,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    calendarCard: { padding: Spacing.three },
+    weekdayRow: { flexDirection: 'row', paddingBottom: Spacing.two },
+    weekdayText: {
+      flexBasis: `${100 / 7}%`,
+      textAlign: 'center',
+      ...PlannerType.labelStrong,
+      color: theme.textSecondary,
+    },
+    sunText: { color: theme.red },
+    satText: { color: theme.blue },
+    grid: { flexDirection: 'row', flexWrap: 'wrap' },
+    cell: { flexBasis: `${100 / 7}%`, alignItems: 'center', paddingVertical: 5, gap: 4 },
+    cellPressed: { opacity: 0.6 },
+    dayBadge: {
+      width: 30,
+      height: 30,
+      borderRadius: PlannerRadius.chip,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    todayBadge: { backgroundColor: theme.accent },
+    selectedBadge: { backgroundColor: theme.surface },
+    dayText: { ...PlannerType.bodyMedium, fontSize: 15 },
+    rateTrack: {
+      width: 20,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.line,
+      overflow: 'hidden',
+    },
+    rateFill: { height: '100%', backgroundColor: theme.ink },
+    planDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: theme.textTertiary },
+    markerSpace: { height: 4 },
+    legendRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: Spacing.four,
+      paddingTop: Spacing.three,
+    },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendText: { ...PlannerType.caption, color: theme.textSecondary },
+    previewCard: { gap: Spacing.two + 2 },
+    previewHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    previewDate: { ...PlannerType.titleM, color: theme.ink },
+    todayChip: {
+      backgroundColor: theme.blueSoft,
+      borderRadius: PlannerRadius.sm,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    todayChipText: { ...PlannerType.labelStrong, fontSize: 12, color: theme.blue },
+    previewSummary: { ...PlannerType.caption, color: theme.textSecondary, marginTop: -6 },
+    stripe: { flexDirection: 'row', gap: 3, height: 8 },
+    stripeSeg: { flexDirection: 'row', borderRadius: 2, overflow: 'hidden' },
+    blockRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+    blockDot: { width: 10, height: 10, borderRadius: 5 },
+    blockName: { ...PlannerType.bodyMedium, color: theme.ink, flex: 1 },
+    blockTime: { ...PlannerType.caption, color: theme.textSecondary },
+    focusChip: {
+      backgroundColor: theme.redSoft,
+      borderRadius: PlannerRadius.sm,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    focusChipText: { ...PlannerType.labelStrong, fontSize: 12, color: theme.red },
+    openBtn: {
+      marginTop: Spacing.one,
+      backgroundColor: theme.accent,
+      borderRadius: PlannerRadius.md,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    openBtnText: { ...PlannerType.bodyMedium, fontWeight: '700', color: theme.onAccent },
+  });

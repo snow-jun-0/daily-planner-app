@@ -149,6 +149,19 @@ export async function saveCategories(cats: Category[]): Promise<void> {
   await setItem(CAT_KEY, cats);
 }
 
+/** 하루의 계획 블록들 (같은 과목 연속 칸 묶음), 시간순 */
+export function plannedBlocks(day: DayTimetable): { start: number; end: number; subject: SubjectId }[] {
+  const out: { start: number; end: number; subject: SubjectId }[] = [];
+  for (let i = 0; i < day.cells.length; i++) {
+    const b = plannedBlockAt(day, i);
+    if (b) {
+      out.push(b);
+      i = b.end;
+    }
+  }
+  return out;
+}
+
 /** 카테고리 색 팔레트 */
 export const CATEGORY_COLORS = [
   '#4C6EF5',
