@@ -16,6 +16,7 @@ import { startFocus } from '@/lib/pomodoro';
 import {
   achievementRate,
   actualByCategory,
+  applyTemplate,
   CATEGORY_COLORS,
   CELL_COUNT,
   CELL_MIN,
@@ -25,6 +26,7 @@ import {
   FOCUS_CATEGORY,
   loadCategories,
   loadStreak,
+  loadTemplates,
   loadTimetable,
   plannedBlockAt,
   saveCategories,
@@ -37,6 +39,7 @@ import {
   updateTimetable,
   type Category,
   type DayTimetable,
+  type PlanTemplate,
   type SubjectId,
 } from '@/lib/timetable';
 
@@ -91,6 +94,7 @@ export function TimetableGrid({
   const [catsLoaded, setCatsLoaded] = useState(false);
   const [newCatOpen, setNewCatOpen] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [templates, setTemplates] = useState<PlanTemplate[]>([]);
   const [activeCat, setActiveCat] = useState<SubjectId>(FOCUS_CATEGORY.id);
   const [erase, setErase] = useState(false);
   /** 집중 시트: undefined=닫힘, null=바로 집중, 블록=계획 칸 탭 */
@@ -135,14 +139,16 @@ export function TimetableGrid({
         dayRef.current = d;
       }
     });
-    // 타이머가 actual을 채우면 다시 읽는다. planned는 이 격자가 주인이라 로컬 것을 유지.
+    // 다른 곳(타이머 actual, 템플릿 적용 등)이 저장하면 다시 읽는다.
+    // 내 칠하기 저장이 아직 대기 중이면 그 planned는 로컬 것을 유지.
     const unsub = subscribeTimetable((dk) => {
       if (dk !== dateKey) return;
       void loadTimetable(dk).then((d) => {
         const cur = dayRef.current;
-        const next = cur
-          ? { ...d, cells: d.cells.map((c, i) => ({ ...c, planned: cur.cells[i]?.planned })) }
-          : d;
+        const next =
+          cur && saveTimer.current
+            ? { ...d, cells: d.cells.map((c, i) => ({ ...c, planned: cur.cells[i]?.planned })) }
+            : d;
         if (alive) {
           setDay(next);
           dayRef.current = next;
@@ -159,6 +165,7 @@ export function TimetableGrid({
   useFocusEffect(
     useCallback(() => {
       void loadStreak().then(setStreak);
+      void loadTemplates().then(setTemplates);
       void loadCategories().then((c) => {
         setCats(c);
         setCatsLoaded(true);
@@ -176,6 +183,7 @@ export function TimetableGrid({
     setDay(next);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
       // 최신 저장본(타이머가 쓴 actual 포함)에 planned만 덮어쓴다
       void updateTimetable(dateKey, (latest) => ({
         ...latest,
@@ -330,7 +338,12 @@ export function TimetableGrid({
   const nowIdx = isToday ? dateToCellIndex(new Date()) : -1;
   const nowRow = nowIdx >= 0 ? Math.floor(nowIdx / COLS) : -1;
   const [yy, mm, dd] = dateKey.split('-').map(Number);
-  const goalH = prefs.goalHours[(new Date(yy, mm - 1, dd).getDay() + 6) % 7] ?? 0;
+  const weekday = (new Date(yy, mm - 1, dd).getDay() + 6) % 7; // 월요일=0
+  const goalH = prefs.goalHours[weekday] ?? 0;
+  // I5: 계획이 빈 날이면 그 요일 템플릿 적용을 제안
+  const suggestTpl = plannedMin
+    ? undefined
+    : templates.find((t) => t.days.includes(weekday) && t.planned.some(Boolean));
   const goalPct = goalH ? Math.min(100, Math.round((actualMin / (goalH * 60)) * 100)) : 0;
 
   function openNewPlan() {
@@ -476,6 +489,11 @@ export function TimetableGrid({
             </Pressable>
           </View>
         </View>
+      ) : suggestTpl ? (
+        <Pressable style={styles.tplSuggest} onPress={() => persist(applyTemplate(day, suggestTpl))}>
+          <Text style={styles.tplText}>‘{suggestTpl.name}’ 템플릿으로 칠하기</Text>
+          <Text style={styles.tplAction}>적용</Text>
+        </Pressable>
       ) : (
         <Text style={styles.hint}>드래그로 계획 칠하기 · 계획 칸 탭하면 집중</Text>
       )}
@@ -784,6 +802,17 @@ const makeStyles = (theme: AppTheme) =>
     focusBtnText: { ...PlannerType.bodyMedium, color: theme.onAccent },
     skeletonRow: { gap: 3, height: CELL_H - 3, marginBottom: 3 },
     skeletonCell: { flex: 1, borderRadius: 4, backgroundColor: theme.surface },
+    tplSuggest: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: PlannerRadius.md,
+      backgroundColor: theme.surface,
+    },
+    tplText: { ...PlannerType.label, color: theme.ink, flex: 1 },
+    tplAction: { ...PlannerType.labelStrong, color: theme.ink },
     onboard: {
       backgroundColor: theme.surface,
       borderRadius: PlannerRadius.md,

@@ -124,6 +124,7 @@ export async function resetAllData(): Promise<void> {
       k.startsWith('stats:') ||
       k.startsWith('timetable:') ||
       k === 'categories' ||
+      k === 'templates' ||
       k.startsWith('settings:'),
   );
   if (mine.length) await AsyncStorage.multiRemove(mine);

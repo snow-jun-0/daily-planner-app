@@ -117,6 +117,13 @@ export default function SettingsScreen() {
         />
         <Divider />
         <SettingsRow
+          icon="copy-outline"
+          title="시간표 템플릿"
+          subtitle="요일마다 반복되는 계획을 한 번에"
+          onPress={() => router.push('/templates' as never)}
+        />
+        <Divider />
+        <SettingsRow
           icon="play"
           title="계획 칸 탭하면 바로 집중 시작"
           subtitle="끄면 상세 시트를 먼저 보여줘요"

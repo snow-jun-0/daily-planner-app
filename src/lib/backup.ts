@@ -19,6 +19,7 @@ const BACKUP_PREFIXES = [
   'settings:',
   'timetable:',
   'categories',
+  'templates',
 ];
 
 async function collectKeys(): Promise<string[]> {

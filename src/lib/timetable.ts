@@ -206,6 +206,39 @@ export function createCategory(name: string, color: string): Category {
   return { id: newCatId(), name, color };
 }
 
+// ───────── 시간표 템플릿 (I5) ─────────
+
+/** 요일별로 반복할 계획. days: 월요일=0 */
+export type PlanTemplate = {
+  id: string;
+  name: string;
+  days: number[];
+  planned: (SubjectId | null)[];
+};
+
+const TPL_KEY = 'templates';
+
+export async function loadTemplates(): Promise<PlanTemplate[]> {
+  return (await getItem<PlanTemplate[]>(TPL_KEY)) ?? [];
+}
+
+export async function saveTemplates(list: PlanTemplate[]): Promise<void> {
+  await setItem(TPL_KEY, list);
+  scheduleAutoBackup();
+}
+
+export function templateFromDay(name: string, days: number[], day: DayTimetable): PlanTemplate {
+  return { id: newCatId(), name, days, planned: day.cells.map((c) => c.planned ?? null) };
+}
+
+/** 템플릿의 계획을 하루에 덮어 칠한다 (템플릿이 빈 칸은 기존 계획 유지) */
+export function applyTemplate(day: DayTimetable, tpl: PlanTemplate): DayTimetable {
+  return {
+    ...day,
+    cells: day.cells.map((c, i) => (tpl.planned[i] ? { ...c, planned: tpl.planned[i]! } : c)),
+  };
+}
+
 // ───────── 집계 ─────────
 
 /** 실제(actual)로 채운 분 + 범위 밖 집중 분 */
