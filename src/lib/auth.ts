@@ -58,6 +58,17 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
 
+/**
+ * 계정 탈퇴: 서버의 delete_my_account()로 Supabase 계정 + 클라우드 백업을 지우고 로그아웃.
+ * (함수 정의: supabase/delete_account.sql) 기기에 저장된 기록은 지우지 않는다.
+ */
+export async function deleteAccount(): Promise<void> {
+  const { error } = await supabase.rpc('delete_my_account');
+  if (error) throw error;
+  // 계정이 사라져 서버 로그아웃은 실패할 수 있으니 기기 세션만 정리한다
+  await supabase.auth.signOut({ scope: 'local' });
+}
+
 /** 현재 로그인 세션을 구독하는 훅 */
 export function useAuthSession() {
   const [session, setSession] = useState<Session | null>(null);

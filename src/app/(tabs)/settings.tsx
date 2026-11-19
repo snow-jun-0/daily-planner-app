@@ -16,7 +16,7 @@ import { PlannerRadius, PlannerSerif, PlannerType, Spacing } from '@/constants/t
 import { useTheme, useThemeControl } from '@/constants/theme-context';
 import { usePrefs } from '@/hooks/use-prefs';
 import { usePro } from '@/lib/pro';
-import { signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
+import { deleteAccount, signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
 import { cancelDailyReflection, scheduleDailyReflection } from '@/lib/notify';
 import * as pomodoro from '@/lib/pomodoro';
 import { getNotifyDaily, resetAllData, setNotifyDaily } from '@/lib/settings';
@@ -59,6 +59,31 @@ export default function SettingsScreen() {
         Alert.alert('로그인 실패', e instanceof Error ? e.message : String(e));
       });
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '계정 탈퇴',
+      '계정과 클라우드 백업이 영구 삭제되고 되돌릴 수 없어요.\n\n' +
+        '· 이 기기에 저장된 기록은 그대로 남아요 (설정 › 데이터 초기화로 지울 수 있어요)\n' +
+        '· Pro 구독은 탈퇴해도 자동 해지되지 않아요. 스토어 › 구독에서 해지해 주세요',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '탈퇴',
+          style: 'destructive',
+          onPress: () =>
+            void deleteAccount()
+              .then(() => Alert.alert('탈퇴 완료', '계정과 클라우드 백업을 삭제했어요.'))
+              .catch((e: unknown) =>
+                Alert.alert(
+                  '탈퇴하지 못했어요',
+                  `잠시 후 다시 시도해 주세요.\n(${e instanceof Error ? e.message : String(e)})`,
+                ),
+              ),
+        },
+      ],
+    );
   };
 
   const handleReviewAlert = (v: boolean) => {
@@ -210,6 +235,18 @@ export default function SettingsScreen() {
             </Pressable>
           }
         />
+        {session ? (
+          <>
+            <Divider />
+            <SettingsRow
+              icon="person-remove-outline"
+              title="계정 탈퇴"
+              subtitle="계정과 클라우드 백업을 삭제합니다"
+              danger
+              onPress={handleDeleteAccount}
+            />
+          </>
+        ) : null}
       </SettingsGroup>
 
       <SettingsGroup label="정보">
