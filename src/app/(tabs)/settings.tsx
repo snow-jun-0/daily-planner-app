@@ -251,6 +251,18 @@ export default function SettingsScreen() {
 
       <SettingsGroup label="정보">
         <SettingsRow
+          icon="shield-checkmark-outline"
+          title="개인정보처리방침"
+          onPress={() => router.push('/legal?doc=privacy' as never)}
+        />
+        <Divider />
+        <SettingsRow
+          icon="document-text-outline"
+          title="이용약관"
+          onPress={() => router.push('/legal?doc=terms' as never)}
+        />
+        <Divider />
+        <SettingsRow
           icon="information-circle-outline"
           title="버전"
           value={Constants.expoConfig?.version ?? '-'}
