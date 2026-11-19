@@ -17,7 +17,7 @@ import { useTheme, useThemeControl } from '@/constants/theme-context';
 import { usePrefs } from '@/hooks/use-prefs';
 import { usePro } from '@/lib/pro';
 import { deleteAccount, signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
-import { openContact } from '@/lib/contact';
+import { OPERATOR_NAME, openContact } from '@/lib/contact';
 import { cancelDailyReflection, scheduleDailyReflection } from '@/lib/notify';
 import * as pomodoro from '@/lib/pomodoro';
 import { getNotifyDaily, resetAllData, setNotifyDaily } from '@/lib/settings';
@@ -271,11 +271,18 @@ export default function SettingsScreen() {
         />
         <Divider />
         <SettingsRow
+          icon="code-slash-outline"
+          title="오픈소스 라이선스"
+          onPress={() => router.push('/licenses' as never)}
+        />
+        <Divider />
+        <SettingsRow
           icon="information-circle-outline"
           title="버전"
           value={Constants.expoConfig?.version ?? '-'}
         />
       </SettingsGroup>
+      <Text style={styles.credit}>만든 사람 · {OPERATOR_NAME}</Text>
     </PlannerScreen>
   );
 }
@@ -290,6 +297,7 @@ const makeStyles = (theme: AppTheme) =>
       paddingHorizontal: Spacing.one,
     },
     segmentWrap: { paddingBottom: 14 },
+    credit: { ...PlannerType.caption, color: theme.textTertiary, textAlign: 'center' },
     connectBtn: {
       paddingVertical: 8,
       paddingHorizontal: 14,
