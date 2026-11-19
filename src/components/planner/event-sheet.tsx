@@ -1,6 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { makeStyles as sheetStyles, TimeField } from '@/components/planner/plan-sheet';
 import type { AppTheme } from '@/constants/theme';
@@ -38,6 +47,7 @@ type Props = {
 export function EventSheet({ event, defaultStart, onClose, onSave, onDelete }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => sheetStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
   const extra = useMemo(() => makeExtra(theme), [theme]);
   const [title, setTitle] = useState(event?.title ?? '');
   const [memo, setMemo] = useState(event?.memo ?? '');
@@ -57,74 +67,87 @@ export function EventSheet({ event, defaultStart, onClose, onSave, onDelete }: P
     const t = title.trim();
     if (!t) return;
     const base = event ?? createEvent(t, 0, 0, color);
-    onSave({ ...base, title: t, start: fromGrid(start), end: fromGrid(end), color, memo: memo.trim() || undefined });
+    onSave({
+      ...base,
+      title: t,
+      start: fromGrid(start),
+      end: fromGrid(end),
+      color,
+      memo: memo.trim() || undefined,
+    });
   }
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text style={styles.title}>{event ? '일정' : '오늘 일정 추가'}</Text>
-            <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={18} color={theme.ink} />
-            </Pressable>
-          </View>
-
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="예: 치과 예약"
-            placeholderTextColor={theme.textTertiary}
-            style={extra.input}
-            multiline
-            autoFocus={!event}
-          />
-
-          <Text style={styles.label}>시간 (10분 단위)</Text>
-          <View style={styles.timeRow}>
-            <TimeField label={fmt(start)} onStep={moveStart} styles={styles} theme={theme} />
-            <TimeField label={fmt(end)} onStep={moveEnd} styles={styles} theme={theme} />
-          </View>
-
-          <Text style={styles.label}>색</Text>
-          <View style={styles.wrapRow}>
-            {COLORS.map((c) => (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                accessibilityLabel={`색 ${c}`}
-                style={[
-                  extra.swatch,
-                  { backgroundColor: eventColor(theme, c) },
-                  c === color && { borderColor: theme.ink },
-                ]}
-              />
-            ))}
-          </View>
-
-          <TextInput
-            value={memo}
-            onChangeText={setMemo}
-            placeholder="메모 (선택)"
-            placeholderTextColor={theme.textTertiary}
-            style={[extra.input, { minHeight: 64 }]}
-            multiline
-          />
-
-          <View style={styles.footer}>
-            {event ? (
-              <Pressable style={styles.deleteBtn} onPress={onDelete} accessibilityLabel="일정 삭제">
-                <Ionicons name="trash-outline" size={20} color={theme.red} />
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <Pressable
+            style={[styles.sheet, { paddingBottom: 20 + insets.bottom }]}
+            onPress={() => {}}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <Text style={styles.title}>{event ? '일정' : '오늘 일정 추가'}</Text>
+              <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={8}>
+                <Ionicons name="close" size={18} color={theme.ink} />
               </Pressable>
-            ) : null}
-            <Pressable style={[styles.saveBtn, !title.trim() && { opacity: 0.4 }]} onPress={save}>
-              <Text style={styles.saveText}>저장</Text>
-            </Pressable>
-          </View>
+            </View>
+
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="예: 치과 예약"
+              placeholderTextColor={theme.textTertiary}
+              style={extra.input}
+              multiline
+            />
+
+            <Text style={styles.label}>시간 (10분 단위)</Text>
+            <View style={styles.timeRow}>
+              <TimeField label={fmt(start)} onStep={moveStart} styles={styles} theme={theme} />
+              <TimeField label={fmt(end)} onStep={moveEnd} styles={styles} theme={theme} />
+            </View>
+
+            <Text style={styles.label}>색</Text>
+            <View style={styles.wrapRow}>
+              {COLORS.map((c) => (
+                <Pressable
+                  key={c}
+                  onPress={() => setColor(c)}
+                  accessibilityLabel={`색 ${c}`}
+                  style={[
+                    extra.swatch,
+                    { backgroundColor: eventColor(theme, c) },
+                    c === color && { borderColor: theme.ink },
+                  ]}
+                />
+              ))}
+            </View>
+
+            <TextInput
+              value={memo}
+              onChangeText={setMemo}
+              placeholder="메모 (선택)"
+              placeholderTextColor={theme.textTertiary}
+              style={[extra.input, { minHeight: 64 }]}
+              multiline
+            />
+
+            <View style={styles.footer}>
+              {event ? (
+                <Pressable
+                  style={styles.deleteBtn}
+                  onPress={onDelete}
+                  accessibilityLabel="일정 삭제">
+                  <Ionicons name="trash-outline" size={20} color={theme.red} />
+                </Pressable>
+              ) : null}
+              <Pressable style={[styles.saveBtn, !title.trim() && { opacity: 0.4 }]} onPress={save}>
+                <Text style={styles.saveText}>저장</Text>
+              </Pressable>
+            </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -140,5 +163,11 @@ const makeExtra = (theme: AppTheme) =>
       color: theme.ink,
       ...PlannerType.body,
     },
-    swatch: { width: 32, height: 32, borderRadius: 16, borderWidth: 3, borderColor: 'transparent' },
+    swatch: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      borderWidth: 3,
+      borderColor: 'transparent',
+    },
   });

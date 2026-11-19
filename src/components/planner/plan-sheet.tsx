@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { PlanBlock } from '@/components/planner/focus-sheet';
@@ -35,6 +36,7 @@ type Props = {
 export function PlanSheet({ cats, initial, isNew, onClose, onSave, onDelete }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
   const [b, setB] = useState(initial);
   const len = b.end - b.start + 1;
 
@@ -49,7 +51,9 @@ export function PlanSheet({ cats, initial, isNew, onClose, onSave, onDelete }: P
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
+        <Pressable
+          style={[styles.sheet, { paddingBottom: 20 + insets.bottom }]}
+          onPress={() => {}}>
           <View style={styles.handle} />
           <View style={styles.header}>
             <Text style={styles.title}>{isNew ? '계획 추가' : '계획 편집'}</Text>
