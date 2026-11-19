@@ -17,6 +17,7 @@ import { useTheme, useThemeControl } from '@/constants/theme-context';
 import { usePrefs } from '@/hooks/use-prefs';
 import { usePro } from '@/lib/pro';
 import { deleteAccount, signInWithGoogle, signOut, useAuthSession } from '@/lib/auth';
+import { openContact } from '@/lib/contact';
 import { cancelDailyReflection, scheduleDailyReflection } from '@/lib/notify';
 import * as pomodoro from '@/lib/pomodoro';
 import { getNotifyDaily, resetAllData, setNotifyDaily } from '@/lib/settings';
@@ -260,6 +261,13 @@ export default function SettingsScreen() {
           icon="document-text-outline"
           title="이용약관"
           onPress={() => router.push('/legal?doc=terms' as never)}
+        />
+        <Divider />
+        <SettingsRow
+          icon="mail-outline"
+          title="문의하기"
+          subtitle="버그 제보 · 기능 제안"
+          onPress={() => void openContact()}
         />
         <Divider />
         <SettingsRow
