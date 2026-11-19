@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MiniGrid, withAlpha } from '@/components/planner/mini-grid';
@@ -9,7 +9,6 @@ import { TimeTimerDial } from '@/components/planner/time-timer-dial';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerSerif, PlannerShadow, PlannerType, Spacing } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
-import { signInWithGoogle } from '@/lib/auth';
 import { setOnboarded } from '@/lib/settings';
 import {
   CATEGORY_COLORS,
@@ -27,7 +26,7 @@ import {
 const SLIDES = [
   { title: '하루를 10분 칸으로 색칠', body: '칸을 손가락으로 쓱 드래그하면\n그 시간이 계획으로 칠해져요.' },
   { title: '집중하면 칸이 차오릅니다', body: '타이머를 켜고 집중하는 동안\n지금 시각의 칸이 실시간으로 채워져요.' },
-  { title: '일정과 공부를 한 화면에', body: '수업·약속은 왼쪽 레인에, 공부는 색칠 칸에.\n빈 시간이 바로 보여요.' },
+  { title: '일정과 공부를 한 화면에', body: '오늘만의 일정은 왼쪽 레인에, 공부는 색칠 칸에.\n빈 시간이 바로 보여요.' },
   { title: 'TOTAL TIME이 쌓여요', body: '실제로 채운 칸만 합산해요.\n과목별 시간과 달성률도 한눈에.' },
 ];
 
@@ -65,14 +64,10 @@ export default function OnboardingScreen() {
   const demoMap = Object.fromEntries(demoCats.map((c) => [c.id, c]));
   const demoIds = demoCats.map((c) => c.id);
 
-  async function finish(withGoogle: boolean) {
+  async function finish() {
     const cats = picked.map((n) => createCategory(n, colorOf(n)));
     await saveCategories([FOCUS_CATEGORY, ...cats]);
     await setOnboarded();
-    if (withGoogle)
-      await signInWithGoogle().catch((e: unknown) =>
-        Alert.alert('로그인 실패', e instanceof Error ? e.message : String(e)),
-      );
     router.replace('/');
   }
 
@@ -92,22 +87,9 @@ export default function OnboardingScreen() {
           </Text>
         </View>
         <View style={styles.bottom}>
-          <Pressable style={[styles.primary, { backgroundColor: theme.paper }]} onPress={() => void finish(false)}>
+          <Pressable style={[styles.primary, { backgroundColor: theme.paper }]} onPress={() => void finish()}>
             <Text style={[styles.primaryText, { color: theme.ink }]}>바로 시작하기</Text>
           </Pressable>
-          <Pressable style={styles.googleBtn} onPress={() => void finish(true)}>
-            <Ionicons name="logo-google" size={18} color={theme.paper} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.label, { color: theme.paper }]}>Google 캘린더 일정 가져오기</Text>
-              <Text style={[styles.caption, { color: theme.textTertiary }]}>
-                수업·약속이 일정 레인에 표시돼요
-              </Text>
-            </View>
-            <Text style={[styles.caption, { color: theme.textTertiary }]}>선택</Text>
-          </Pressable>
-          <Text style={[styles.caption, styles.centerText, { color: theme.textTertiary }]}>
-            나중에 설정 › 연동에서 언제든 연결할 수 있어요.
-          </Text>
         </View>
       </SafeAreaView>
     );
@@ -340,14 +322,5 @@ const makeStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 12,
-    },
-    googleBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      padding: 14,
-      borderRadius: PlannerRadius.md,
-      borderWidth: 1,
-      borderColor: theme.textSecondary,
     },
   });

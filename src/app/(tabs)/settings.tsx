@@ -50,7 +50,7 @@ export default function SettingsScreen() {
 
   const handleGoogle = () => {
     if (session) {
-      Alert.alert('구글 연결 해제', '로그아웃할까요?', [
+      Alert.alert('로그아웃', '로그아웃할까요?', [
         { text: '취소', style: 'cancel' },
         { text: '로그아웃', style: 'destructive', onPress: () => void signOut() },
       ]);
@@ -199,18 +199,14 @@ export default function SettingsScreen() {
         />
       </SettingsGroup>
 
-      <SettingsGroup label="연동 (선택)">
+      <SettingsGroup label="계정">
         <SettingsRow
           icon="logo-google"
-          title="Google 캘린더 일정 읽어오기"
-          subtitle={
-            session
-              ? `${session.user.email ?? '연결됨'} · 일정이 타임테이블에 표시돼요`
-              : '연결하면 오늘 일정이 타임테이블에 연하게 표시돼요'
-          }
+          title="Google 로그인"
+          subtitle={session ? (session.user.email ?? '로그인됨') : '로그인하면 클라우드 백업을 쓸 수 있어요'}
           right={
             <Pressable style={styles.connectBtn} onPress={handleGoogle}>
-              <Text style={styles.connectText}>{session ? '해제' : '연결'}</Text>
+              <Text style={styles.connectText}>{session ? '로그아웃' : '로그인'}</Text>
             </Pressable>
           }
         />

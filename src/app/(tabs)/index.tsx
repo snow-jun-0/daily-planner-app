@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { AppState, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DayHeader } from '@/components/planner/day-header';
@@ -14,16 +14,13 @@ import type { AppTheme } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
 import { addDays, formatHeaderLabel, formatMonthDay } from '@/lib/date';
 import { timetableDateKey } from '@/lib/timetable';
-import { createEvent, loadEvents, saveEvents, type Event, type EventColor } from '@/lib/events';
+import { loadEvents, saveEvents, type Event } from '@/lib/events';
 import { loadMemo, saveMemo } from '@/lib/memos';
 import { useAuthSession } from '@/lib/auth';
 import { getDDayCount, loadVisibleDDays } from '@/lib/dday';
-import { syncGoogleCalendar } from '@/lib/gcal';
-import { getAutoSyncCalendar, isOnboarded } from '@/lib/settings';
+import { isOnboarded } from '@/lib/settings';
 import { consumePendingViewDate } from '@/lib/navigation';
-import { DEFAULT_TASKLIST, deleteGTask, insertGTask, setGTaskStatus } from '@/lib/gtasks';
 import { maybeRestoreOnLogin } from '@/lib/backup';
-import { runReverseSync } from '@/lib/task-sync';
 import { createTask, loadTasks, saveTasks, type Task, type TaskPriority } from '@/lib/tasks';
 
 export default function DailyScreen() {
@@ -37,8 +34,7 @@ export default function DailyScreen() {
   const [ddays, setDdays] = useState<DDayItem[]>([]);
   const [ddayModal, setDdayModal] = useState(false);
   const { session } = useAuthSession();
-  const reverseSyncedFor = useRef<string | null>(null);
-  const lastResyncAt = useRef(0);
+  const restoredFor = useRef<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const isToday = viewDate === timetableDateKey();
   const doneCount = tasks.filter((t) => t.done).length;
@@ -69,16 +65,11 @@ export default function DailyScreen() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      if (session) {
-        const auto = await getAutoSyncCalendar();
-        if (auto) await syncGoogleCalendar(viewDate).catch(() => {});
-        // 로그인 세션당 1회: 구글 Tasks 전역 역동기화 (완료/삭제/날짜이동/신규 편입)
-        const uid = session.user?.id ?? 'signed-in';
-        if (reverseSyncedFor.current !== uid) {
-          reverseSyncedFor.current = uid;
-          await maybeRestoreOnLogin().catch(() => {});
-          await runReverseSync().catch(() => {});
-        }
+      // 로그인 세션당 1회: 새 설치면 클라우드 백업 자동 복원
+      const uid = session?.user?.id;
+      if (uid && restoredFor.current !== uid) {
+        restoredFor.current = uid;
+        await maybeRestoreOnLogin().catch(() => {});
       }
       const [t, e, m] = await Promise.all([
         loadTasks(viewDate),
@@ -96,34 +87,9 @@ export default function DailyScreen() {
     };
   }, [viewDate, session]);
 
-  // 앱이 백그라운드에서 돌아오면(딴 데서 구글 할일 수정하고 복귀 등) 역동기화 다시
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (st) => {
-      if (st !== 'active' || !session) return;
-      if (Date.now() - lastResyncAt.current < 60_000) return;
-      lastResyncAt.current = Date.now();
-      void (async () => {
-        await runReverseSync().catch(() => {});
-        const [t, e, m] = await Promise.all([
-          loadTasks(viewDate),
-          loadEvents(viewDate),
-          loadMemo(viewDate),
-        ]);
-        setTasks(t);
-        setEvents(e);
-        setMemo(m);
-      })();
-    });
-    return () => sub.remove();
-  }, [session, viewDate]);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (session) {
-        await syncGoogleCalendar(viewDate).catch(() => {});
-        await runReverseSync().catch(() => {});
-      }
       const [t, e, m] = await Promise.all([
         loadTasks(viewDate),
         loadEvents(viewDate),
@@ -135,7 +101,7 @@ export default function DailyScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [session, viewDate]);
+  }, [viewDate]);
 
   function persistTasks(next: Task[]) {
     setTasks(next);
@@ -143,30 +109,15 @@ export default function DailyScreen() {
   }
 
   function handleAdd(text: string, priority: TaskPriority) {
-    const task = createTask(text, priority);
-    const next = [...tasks, task];
-    persistTasks(next);
-    void insertGTask(text, viewDate, task.id).then((g) => {
-      if (g)
-        persistTasks(
-          next.map((t) =>
-            t.id === task.id ? { ...t, googleTaskId: g.id, googleTaskListId: g.taskListId } : t,
-          ),
-        );
-    });
+    persistTasks([...tasks, createTask(text, priority)]);
   }
 
   function handleToggle(id: string) {
-    const task = tasks.find((t) => t.id === id);
     persistTasks(tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-    if (task?.googleTaskId)
-      void setGTaskStatus(task.googleTaskListId ?? DEFAULT_TASKLIST, task.googleTaskId, !task.done);
   }
 
   function handleDelete(id: string) {
-    const task = tasks.find((t) => t.id === id);
     persistTasks(tasks.filter((t) => t.id !== id));
-    if (task?.googleTaskId) void deleteGTask(task.googleTaskListId ?? DEFAULT_TASKLIST, task.googleTaskId);
   }
 
   function persistEvents(next: Event[]) {
@@ -174,13 +125,6 @@ export default function DailyScreen() {
     saveEvents(viewDate, next);
   }
 
-  function handleAddEvent(title: string, start: number, end: number, color: EventColor) {
-    persistEvents([...events, createEvent(title, start, end, color)]);
-  }
-
-  function handleDeleteEvent(id: string) {
-    persistEvents(events.filter((e) => e.id !== id));
-  }
 
   function handleSaveMemo(text: string) {
     setMemo(text);
@@ -228,6 +172,7 @@ export default function DailyScreen() {
             dateKey={viewDate}
             isToday={isToday}
             events={events}
+            onChangeEvents={persistEvents}
             onSelectDate={setViewDate}
             onStartFocus={() => router.push('/timer' as never)}
           />

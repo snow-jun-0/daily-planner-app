@@ -9,7 +9,6 @@ import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType, Spacing } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
 import { addDays, formatDisplayDate, todayKey } from '@/lib/date';
-import { DEFAULT_TASKLIST, setGTaskStatus } from '@/lib/gtasks';
 import { requestViewDate } from '@/lib/navigation';
 import { loadAllTaskDays, saveTasks, type Task } from '@/lib/tasks';
 
@@ -42,17 +41,9 @@ export default function AllTasksScreen() {
 
   function toggle(date: string, id: string) {
     const list = days[date] ?? [];
-    const target = list.find((t) => t.id === id);
-    if (!target) return;
     const next = list.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
     setDays((prev) => ({ ...prev, [date]: next }));
     void saveTasks(date, next);
-    if (target.googleTaskId)
-      void setGTaskStatus(
-        target.googleTaskListId ?? DEFAULT_TASKLIST,
-        target.googleTaskId,
-        !target.done,
-      );
   }
 
   // 할 일 추가는 오늘 화면의 할 일 카드에서

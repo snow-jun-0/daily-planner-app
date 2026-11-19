@@ -12,7 +12,6 @@ const K = {
   notifyDailyLast: 'settings:notifyDailyLast',
   timetableRange: 'settings:timetableRange',
   darkMode: 'settings:darkMode',
-  autoSyncCalendar: 'settings:autoSyncCalendar',
 } as const;
 
 /** 뽀모도로 완료 등에 쓸 알림 방식. 기본값 'sound' (v1과 동일) */
@@ -54,14 +53,6 @@ export async function getDarkModeStored(): Promise<boolean | null> {
 }
 export async function setDarkModeStored(v: boolean): Promise<void> {
   await setItem(K.darkMode, v);
-}
-
-/** 시간표 자동 동기화(구글 캘린더) on/off, 기본 off */
-export async function getAutoSyncCalendar(): Promise<boolean> {
-  return (await getItem<boolean>(K.autoSyncCalendar)) ?? false;
-}
-export async function setAutoSyncCalendar(v: boolean): Promise<void> {
-  await setItem(K.autoSyncCalendar, v);
 }
 
 /** 화면 설정 묶음 (D5·E6·E7·H1). 새 설정은 여기에 필드만 추가한다. */

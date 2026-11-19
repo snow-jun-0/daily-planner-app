@@ -13,6 +13,7 @@ export type Event = {
   /** minutes since midnight, e.g. 10:30 = 630 */
   end: number;
   color: EventColor;
+  memo?: string;
 };
 
 export { todayKey };

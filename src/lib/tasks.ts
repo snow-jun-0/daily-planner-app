@@ -10,10 +10,6 @@ export type Task = {
   text: string;
   priority: TaskPriority;
   done: boolean;
-  /** 연결된 구글 Tasks 항목 id (동기화용) */
-  googleTaskId?: string;
-  /** 그 항목이 속한 구글 Tasks 목록 id (완료/삭제 라우팅용, 보통 "@default") */
-  googleTaskListId?: string;
 };
 
 export { todayKey };

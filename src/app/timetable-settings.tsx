@@ -1,5 +1,4 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,9 +14,6 @@ import type { AppTheme } from '@/constants/theme';
 import { PlannerType, Spacing } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
 import { usePrefs } from '@/hooks/use-prefs';
-import { useAuthSession } from '@/lib/auth';
-import { syncGoogleCalendar } from '@/lib/gcal';
-import { getAutoSyncCalendar, setAutoSyncCalendar } from '@/lib/settings';
 import { ROWS, START_HOUR } from '@/lib/timetable';
 
 /** H1 — 설정 > 타임테이블 상세 */
@@ -25,14 +21,6 @@ export default function TimetableSettingsScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [prefs, updatePrefs] = usePrefs();
-  const { session } = useAuthSession();
-  const [calendar, setCalendar] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      void getAutoSyncCalendar().then(setCalendar);
-    }, []),
-  );
 
   const endHour = (START_HOUR + ROWS) % 24;
   // 24시간 막대에서 06시~익일 02시 구간 (자정을 넘으므로 두 조각)
@@ -104,21 +92,6 @@ export default function TimetableSettingsScreen() {
               onChange={(v) => updatePrefs({ laneWidth: v })}
             />
           </View>
-          <Divider />
-          <SettingsRow
-            title="Google 캘린더 일정 표시"
-            subtitle={session ? '켜면 오늘 일정을 레인에 읽어와요' : '설정 > 연동에서 먼저 연결하세요'}
-            right={
-              <Toggle
-                value={calendar}
-                onChange={(v) => {
-                  setCalendar(v);
-                  void setAutoSyncCalendar(v);
-                  if (v && session) void syncGoogleCalendar().catch(() => {});
-                }}
-              />
-            }
-          />
         </SettingsGroup>
 
         <SettingsGroup label="동작">

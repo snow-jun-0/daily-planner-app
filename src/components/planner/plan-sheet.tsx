@@ -114,7 +114,7 @@ export function PlanSheet({ cats, initial, isNew, onClose, onSave, onDelete }: P
   );
 }
 
-function TimeField({
+export function TimeField({
   label,
   onStep,
   styles,
@@ -138,7 +138,7 @@ function TimeField({
   );
 }
 
-const makeStyles = (theme: AppTheme) =>
+export const makeStyles = (theme: AppTheme) =>
   StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
     sheet: {

@@ -4,7 +4,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { Alert } from 'react-native';
 import { useEffect, useState } from 'react';
 
-import { syncGoogleCalendar } from './gcal';
 import { supabase } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -33,8 +32,6 @@ export async function signInWithGoogle(): Promise<void> {
     options: {
       redirectTo,
       skipBrowserRedirect: true,
-      scopes:
-        'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks',
       queryParams: { access_type: 'offline', prompt: 'consent' },
     },
   });
@@ -53,7 +50,6 @@ export async function signInWithGoogle(): Promise<void> {
       if (saveStatus !== 'ok') {
         Alert.alert('[디버그] 토큰 저장 상태', saveStatus);
       }
-      await syncGoogleCalendar().catch(() => {});
     }
   }
 }

@@ -4,6 +4,7 @@ import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 
 import { NewCategorySheet } from '@/components/planner/category-form';
 import { CircularProgress } from '@/components/planner/circular-progress';
+import { EventSheet, eventColor } from '@/components/planner/event-sheet';
 import { FocusSheet, type PlanBlock } from '@/components/planner/focus-sheet';
 import { PlanSheet } from '@/components/planner/plan-sheet';
 import { WeekGrid } from '@/components/planner/week-grid';
@@ -13,6 +14,7 @@ import { PlannerRadius, PlannerShadow, PlannerType } from '@/constants/theme';
 import { useTheme } from '@/constants/theme-context';
 import { useNow } from '@/hooks/use-now';
 import { usePrefs } from '@/hooks/use-prefs';
+import type { Event } from '@/lib/events';
 import { startFocus } from '@/lib/pomodoro';
 import {
   achievementRate,
@@ -68,14 +70,13 @@ function toGridMin(m: number): number {
   return (m < START_HOUR * 60 ? m + 1440 : m) - START_HOUR * 60;
 }
 
-type LaneEvent = { id: string; title: string; start: number; end: number };
-
 type Props = {
   dateKey: string;
   isToday: boolean;
   onStartFocus?: () => void;
-  /** 일정 레인 (수업·약속) — 자정 기준 분 */
-  events?: LaneEvent[];
+  /** 일정 레인 — 오늘만의 특별 일정 (자정 기준 분) */
+  events?: Event[];
+  onChangeEvents?: (next: Event[]) => void;
   /** 주간 뷰에서 날짜 탭 */
   onSelectDate?: (dateKey: string) => void;
 };
@@ -85,6 +86,7 @@ export function TimetableGrid({
   isToday,
   onStartFocus,
   events = [],
+  onChangeEvents,
   onSelectDate,
 }: Props) {
   const theme = useTheme();
@@ -106,6 +108,8 @@ export function TimetableGrid({
   const [laneToggled, setLaneToggled] = useState<boolean | null>(null);
   const laneOpen = laneToggled ?? prefs.laneMode === 'open';
   const [mode, setMode] = useState<'day' | 'week'>('day');
+  /** 일정 시트: undefined=닫힘, null=새 일정, Event=상세/수정 */
+  const [evSheet, setEvSheet] = useState<Event | null | undefined>(undefined);
 
   const dayRef = useRef<DayTimetable | null>(null);
   const gridBox = useRef({ x: 0, y: 0, w: 0 });
@@ -446,6 +450,11 @@ export function TimetableGrid({
       <View style={styles.titleRow}>
         <Text style={styles.sectionTitle}>타임테이블</Text>
         <View style={styles.titleRight}>
+          {onChangeEvents && prefs.laneMode !== 'hidden' ? (
+            <Pressable style={styles.addPlan} onPress={() => setEvSheet(null)} hitSlop={6}>
+              <Text style={styles.addPlanText}>+ 일정</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.addPlan} onPress={openNewPlan} hitSlop={6}>
             <Text style={styles.addPlanText}>+ 계획</Text>
           </Pressable>
@@ -549,20 +558,31 @@ export function TimetableGrid({
             style={laneOpen ? [styles.laneOpen, { width: prefs.laneWidth }] : styles.laneClosed}
             onPress={() => setLaneToggled(!laneOpen)}
             accessibilityLabel={laneOpen ? '일정 레인 접기' : '일정 레인 펼치기'}>
-            {lane.map((e) => (
-              <View
-                key={e.id}
-                style={[
-                  styles.laneItem,
-                  { top: (e.top / 60) * CELL_H, height: ((e.bottom - e.top) / 60) * CELL_H - 2 },
-                ]}>
-                {laneOpen ? (
-                  <Text style={styles.laneText} numberOfLines={1}>
-                    {e.title}
-                  </Text>
-                ) : null}
-              </View>
-            ))}
+            {lane.map((e) => {
+              const c = eventColor(theme, e.color);
+              return (
+                <Pressable
+                  key={e.id}
+                  disabled={!laneOpen}
+                  onPress={() => setEvSheet(events.find((x) => x.id === e.id))}
+                  accessibilityLabel={`일정 ${e.title}`}
+                  style={[
+                    styles.laneItem,
+                    {
+                      top: (e.top / 60) * CELL_H,
+                      height: ((e.bottom - e.top) / 60) * CELL_H - 2,
+                      borderLeftColor: c,
+                      backgroundColor: withAlpha(c, 0.18),
+                    },
+                  ]}>
+                  {laneOpen ? (
+                    <Text style={styles.laneText} numberOfLines={1}>
+                      {e.title}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
           </Pressable>
         ) : null}
         <View
@@ -677,6 +697,26 @@ export function TimetableGrid({
             setActiveCat(cat.id);
             setErase(false);
             setNewCatOpen(false);
+          }}
+        />
+      ) : null}
+
+      {evSheet !== undefined && onChangeEvents ? (
+        <EventSheet
+          event={evSheet ?? undefined}
+          defaultStart={isToday ? Math.ceil((new Date(now).getHours() * 60 + new Date(now).getMinutes()) / 10) * 10 : 9 * 60}
+          onClose={() => setEvSheet(undefined)}
+          onSave={(ev) => {
+            onChangeEvents(
+              events.some((x) => x.id === ev.id)
+                ? events.map((x) => (x.id === ev.id ? ev : x))
+                : [...events, ev],
+            );
+            setEvSheet(undefined);
+          }}
+          onDelete={() => {
+            onChangeEvents(events.filter((x) => x.id !== evSheet?.id));
+            setEvSheet(undefined);
           }}
         />
       ) : null}
