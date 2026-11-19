@@ -33,7 +33,10 @@ export function AnimatedSplashOverlay() {
     },
   });
 
-  const image = <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />;
+  // 네이티브 스플래시와 같은 마크·크기(app.json expo-splash-screen imageWidth)여야 전환이 튀지 않는다
+  const image = (
+    <Image style={styles.splashMark} source={require('@/assets/images/splash-icon.png')} />
+  );
 
   return animate ? (
     <Animated.View
@@ -138,6 +141,7 @@ const styles = StyleSheet.create({
     height: 128,
     position: 'absolute',
   },
+  splashMark: { width: 120, height: 120 },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: '#208AEF',
