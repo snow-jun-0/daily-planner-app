@@ -63,6 +63,16 @@ function fmtTotal(min: number): string {
   return `${Math.floor(min / 60)}H ${pad(min % 60)}M`;
 }
 
+/** 잔디 농도 단계: 0 / ~1시간 / ~2시간 / ~4시간 / 4시간+ */
+const HEAT_ALPHA = [0, 0.3, 0.5, 0.75, 1];
+function heatLevel(min: number): number {
+  if (!min) return 0;
+  if (min < 60) return 1;
+  if (min < 120) return 2;
+  if (min < 240) return 3;
+  return 4;
+}
+
 export default function MonthlyScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -120,6 +130,14 @@ export default function MonthlyScreen() {
     router.navigate('/');
   }
 
+  // 잔디밭: 이 달 일별 실제 집중 분
+  const heat = grid.map((c) => (c.dateKey && days[c.dateKey] ? totalActualMin(days[c.dateKey]) : 0));
+  const weeks = Array.from({ length: grid.length / 7 }, (_, w) => w);
+  const monthMin = heat.reduce((a, b) => a + b, 0);
+  const focusDays = heat.filter(Boolean).length;
+  const bestMin = Math.max(0, ...heat);
+  const heatColor = (lv: number) => (lv ? withAlpha(theme.green, HEAT_ALPHA[lv]) : theme.surface);
+
   const sel = days[selected];
   const selDate = new Date(Number(selected.slice(0, 4)), Number(selected.slice(5, 7)) - 1, Number(selected.slice(8)));
   const blocks = sel ? plannedBlocks(sel) : [];
@@ -160,6 +178,55 @@ export default function MonthlyScreen() {
           <Ionicons name="bar-chart-outline" size={18} color={theme.ink} />
         </Pressable>
       </View>
+
+      <PlannerCard style={styles.heatCard}>
+        <View style={styles.heatBody}>
+          <View style={styles.heatGrid}>
+            <View style={styles.heatCol}>
+              {WEEKDAYS.map((w, i) => (
+                <Text key={w} style={styles.heatWeekday}>
+                  {i % 2 ? w : ''}
+                </Text>
+              ))}
+            </View>
+            {weeks.map((w) => (
+              <View key={w} style={styles.heatCol}>
+                {grid.slice(w * 7, w * 7 + 7).map((cell, d) => {
+                  const min = heat[w * 7 + d];
+                  return cell.dateKey ? (
+                    <Pressable
+                      key={d}
+                      onPress={() => openDay(cell.dateKey!)}
+                      hitSlop={2}
+                      accessibilityLabel={`${month}월 ${cell.day}일 집중 ${fmtTotal(min)}`}
+                      style={[
+                        styles.heatSq,
+                        { backgroundColor: heatColor(heatLevel(min)) },
+                        cell.dateKey === today && styles.heatToday,
+                      ]}
+                    />
+                  ) : (
+                    <View key={d} style={[styles.heatSq, styles.heatEmpty]} />
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+          <View style={styles.heatSummary}>
+            <Text style={styles.heatLabel}>이번 달 집중</Text>
+            <Text style={styles.heatTotal}>{fmtTotal(monthMin)}</Text>
+            <Text style={styles.heatSub}>집중한 날 {focusDays}일</Text>
+            {bestMin ? <Text style={styles.heatSub}>최고 {fmtTotal(bestMin)}</Text> : null}
+          </View>
+        </View>
+        <View style={styles.heatLegend}>
+          <Text style={styles.legendText}>적게</Text>
+          {HEAT_ALPHA.map((_, lv) => (
+            <View key={lv} style={[styles.heatLegendSq, { backgroundColor: heatColor(lv) }]} />
+          ))}
+          <Text style={styles.legendText}>많이</Text>
+        </View>
+      </PlannerCard>
 
       <PlannerCard style={styles.calendarCard}>
         <View style={styles.weekdayRow}>
@@ -319,6 +386,27 @@ const makeStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    heatCard: { padding: Spacing.three, gap: Spacing.two },
+    heatBody: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+    heatGrid: { flexDirection: 'row', gap: 4 },
+    heatCol: { gap: 4 },
+    heatWeekday: {
+      ...PlannerType.caption,
+      fontSize: 10,
+      lineHeight: 20,
+      height: 20,
+      color: theme.textTertiary,
+      marginRight: 2,
+    },
+    heatSq: { width: 20, height: 20, borderRadius: 5 },
+    heatEmpty: { backgroundColor: 'transparent' },
+    heatToday: { borderWidth: 1.5, borderColor: theme.ink },
+    heatSummary: { flex: 1, gap: 2 },
+    heatLabel: { ...PlannerType.caption, color: theme.textSecondary },
+    heatTotal: { ...PlannerType.titleM, fontSize: 22, color: theme.ink },
+    heatSub: { ...PlannerType.caption, color: theme.textSecondary },
+    heatLegend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+    heatLegendSq: { width: 12, height: 12, borderRadius: 3 },
     calendarCard: { padding: Spacing.three },
     weekdayRow: { flexDirection: 'row', paddingBottom: Spacing.two },
     weekdayText: {
