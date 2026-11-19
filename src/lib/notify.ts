@@ -18,11 +18,11 @@ const ALARM_CHANNEL_ID = 'overrun-alarm';
 let channelReady = false;
 async function ensureChannel(): Promise<void> {
   if (Platform.OS !== 'android' || channelReady) return;
+  // sound를 지정하지 않으면 시스템 기본 알림음. ('default' 문자열은 커스텀 사운드 파일명으로 해석돼 에러)
   // 일반 리마인더: heads-up 배너용 importance MAX.
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: '리마인더',
     importance: Notifications.AndroidImportance.MAX,
-    sound: 'default',
     vibrationPattern: [0, 400, 200, 400],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
@@ -30,7 +30,6 @@ async function ensureChannel(): Promise<void> {
   await Notifications.setNotificationChannelAsync(ALARM_CHANNEL_ID, {
     name: '휴식 초과 알람',
     importance: Notifications.AndroidImportance.MAX,
-    sound: 'default',
     vibrationPattern: [0, 600, 300, 600, 300, 600],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
