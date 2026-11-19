@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "daily-planner-app",
+    "name": "데일리 플래너",
     "slug": "daily-planner-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,6 +9,14 @@
     "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.snowjun.dailyplanner",
+      "permissions": [
+        "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundColor": "#208AEF",
