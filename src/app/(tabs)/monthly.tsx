@@ -418,7 +418,8 @@ const makeStyles = (theme: AppTheme) =>
     sunText: { color: theme.red },
     satText: { color: theme.blue },
     grid: { flexDirection: 'row', flexWrap: 'wrap' },
-    cell: { flexBasis: `${100 / 7}%`, alignItems: 'center', paddingVertical: 5, gap: 4 },
+    // 100/7%는 반올림으로 7칸 합이 한 줄을 넘어 6칸에서 줄바꿈된다 → 살짝 작게
+    cell: { width: '14.28%', alignItems: 'center', paddingVertical: 5, gap: 4 },
     cellPressed: { opacity: 0.6 },
     dayBadge: {
       width: 30,
