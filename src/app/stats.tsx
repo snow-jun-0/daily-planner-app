@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CircularProgress } from '@/components/planner/circular-progress';
 import { withAlpha } from '@/components/planner/mini-grid';
+import { BADGES, isEarned, loadBadgeStats, loadEarned, type BadgeStats } from '@/lib/badges';
 import { ProLock } from '@/components/planner/pro-lock';
 import type { AppTheme } from '@/constants/theme';
 import { PlannerRadius, PlannerShadow, PlannerType, Spacing } from '@/constants/theme';
@@ -154,6 +155,14 @@ export default function StatsScreen() {
   useEffect(() => {
     void loadCategories().then(setCats);
   }, []);
+  const [badges, setBadges] = useState<{ stats: BadgeStats; earned: Record<string, string> } | null>(
+    null,
+  );
+  useEffect(() => {
+    void Promise.all([loadBadgeStats(), loadEarned()]).then(([stats, earned]) =>
+      setBadges({ stats, earned }),
+    );
+  }, []);
 
   const shift = (delta: number) =>
     setYm((c) => {
@@ -190,6 +199,7 @@ export default function StatsScreen() {
       {data ? (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Summary data={data} styles={styles} theme={theme} />
+          {badges ? <Badges {...badges} styles={styles} theme={theme} /> : null}
           <SubjectBars data={data} catMap={catMap} styles={styles} />
           <ProLock desc="언제 집중이 잘 되는지 요일 × 시간대로 보여줘요.">
             <Heatmap heat={data.heat} styles={styles} theme={theme} />
@@ -240,6 +250,50 @@ function Summary({ data, styles, theme }: { data: Data } & SP) {
           <Text style={styles.caption}>{c.sub}</Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+/** 배지·업적 — 얻은 것은 색, 아직인 것은 회색 + 진행도 */
+function Badges({
+  stats,
+  earned,
+  styles,
+  theme,
+}: { stats: BadgeStats; earned: Record<string, string> } & SP) {
+  const got = BADGES.filter((b) => earned[b.id] || isEarned(b, stats)).length;
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHead}>
+        <Text style={styles.cardTitle}>배지</Text>
+        <Text style={styles.caption}>
+          {got} / {BADGES.length}
+        </Text>
+      </View>
+      <View style={styles.badgeGrid}>
+        {BADGES.map((b) => {
+          const on = !!earned[b.id] || isEarned(b, stats);
+          const [cur, goal] = b.progress(stats);
+          return (
+            <View key={b.id} style={styles.badgeItem} accessible accessibilityLabel={`${b.title}, ${on ? '획득' : `${Math.min(cur, goal)}/${goal}`}`}>
+              <View style={[styles.badgeMedal, on && { backgroundColor: theme.amberSoft }]}>
+                <Ionicons name={b.icon} size={22} color={on ? theme.amber : theme.textTertiary} />
+              </View>
+              <Text style={[styles.badgeName, !on && { color: theme.textTertiary }]} numberOfLines={1}>
+                {b.title}
+              </Text>
+              <Text style={styles.badgeSub} numberOfLines={1}>
+                {on ? (earned[b.id] ? earned[b.id].slice(5).replace('-', '.') : '획득') : `${Math.min(cur, goal)}/${goal}`}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      {stats.bestSubjectName ? (
+        <Text style={styles.caption}>
+          가장 많이 한 과목 · {stats.bestSubjectName} {Math.floor(stats.bestSubjectMin / 60)}시간
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -456,6 +510,18 @@ const makeStyles = (theme: AppTheme) =>
     },
     cardHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
     cardTitle: { ...PlannerType.titleS, color: theme.ink },
+    badgeGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 14 },
+    badgeItem: { width: '25%', alignItems: 'center', gap: 4 },
+    badgeMedal: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    badgeName: { ...PlannerType.labelStrong, fontSize: 12, color: theme.ink },
+    badgeSub: { ...PlannerType.caption, fontSize: 11, color: theme.textTertiary },
     caption: { ...PlannerType.caption, color: theme.textSecondary },
     strong: { ...PlannerType.labelStrong, color: theme.ink },
     statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three },

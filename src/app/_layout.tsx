@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { LogBox, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { BadgeCelebration } from '@/components/planner/badge-celebration';
 import { Planner, PlannerDark, PlannerRadius, PlannerType } from '@/constants/theme';
 import { PlannerThemeProvider, useThemeControl } from '@/constants/theme-context';
 import { initPro } from '@/lib/pro';
@@ -38,6 +39,7 @@ function RootNavigator() {
     <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
       <Stack screenOptions={{ headerShown: false }} />
+      <BadgeCelebration />
     </ThemeProvider>
   );
 }

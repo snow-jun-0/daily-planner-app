@@ -18,6 +18,7 @@ const BACKUP_PREFIXES = [
   'pomodoro:',
   'settings:',
   'timetable:',
+  'badges:',
   'categories',
   'templates',
 ];
