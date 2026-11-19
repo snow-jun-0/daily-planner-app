@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -28,7 +29,7 @@ import {
   dateToCellIndex,
   FOCUS_CATEGORY,
   loadCategories,
-  loadStreak,
+  loadStreakStats,
   loadTemplates,
   loadTimetable,
   plannedBlockAt,
@@ -96,7 +97,7 @@ export function TimetableGrid({
   const [cats, setCats] = useState<Category[]>([FOCUS_CATEGORY]);
   const [catsLoaded, setCatsLoaded] = useState(false);
   const [newCatOpen, setNewCatOpen] = useState(false);
-  const [streak, setStreak] = useState(0);
+  const [streak, setStreak] = useState({ current: 0, best: 0 });
   const [templates, setTemplates] = useState<PlanTemplate[]>([]);
   const [activeCat, setActiveCat] = useState<SubjectId>(FOCUS_CATEGORY.id);
   const [erase, setErase] = useState(false);
@@ -168,10 +169,16 @@ export function TimetableGrid({
     };
   }, [dateKey]);
 
+  // 오늘 첫 칸을 채우거나(0→1칸) 다 지우면 연속 기록이 바뀐다 → 바로 다시 계산
+  const todayFilled = isToday && !!day && totalActualMin(day) > 0;
+  useEffect(() => {
+    void loadStreakStats().then(setStreak);
+  }, [todayFilled]);
+
   // 카테고리 화면(G9)에서 돌아오면 다시 읽는다
   useFocusEffect(
     useCallback(() => {
-      void loadStreak().then(setStreak);
+      void loadStreakStats().then(setStreak);
       void loadTemplates().then(setTemplates);
       void loadCategories().then((c) => {
         setCats(c);
@@ -425,11 +432,13 @@ export function TimetableGrid({
         </View>
         <View style={styles.rateBox}>
           <Text style={styles.rateSub}>목표 {goalH}H</Text>
-          {streak > 0 ? (
+          {streak.current > 0 ? (
             <View style={styles.streakBadge}>
-              <Text style={styles.streakText}>{streak}일 연속</Text>
+              <Ionicons name="flame" size={14} color={theme.amber} />
+              <Text style={styles.streakText}>{streak.current}일 연속</Text>
             </View>
           ) : null}
+          {streak.best > 1 ? <Text style={styles.streakBest}>최장 {streak.best}일</Text> : null}
         </View>
       </Pressable>
 
@@ -755,12 +764,16 @@ const makeStyles = (theme: AppTheme) =>
     ringText: { ...PlannerType.labelStrong, color: theme.ink },
     streakBadge: {
       marginTop: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
       backgroundColor: theme.amberSoft,
-      borderRadius: PlannerRadius.sm,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      borderRadius: PlannerRadius.chip,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
     },
-    streakText: { ...PlannerType.labelStrong, fontSize: 12, color: theme.amber },
+    streakText: { ...PlannerType.labelStrong, fontSize: 13, color: theme.amber },
+    streakBest: { ...PlannerType.caption, fontSize: 11, color: theme.textTertiary, marginTop: 2 },
     totalLabel: { ...PlannerType.overline, color: theme.textTertiary },
     totalValue: { ...PlannerType.display, color: theme.ink },
     rateBox: { alignItems: 'flex-end' },

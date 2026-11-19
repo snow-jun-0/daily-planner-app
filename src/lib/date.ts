@@ -50,3 +50,24 @@ export function formatHeaderLabel(dateKey: string): string {
   const [, m] = dateKey.split('-').map(Number);
   return `${WEEKDAYS_EN[date.getDay()]} · ${m}월`;
 }
+
+/**
+ * 기록한 날짜 집합으로 연속 기록 계산 (scripts/streak.check.mjs로 검증).
+ * current: 오늘(아직 없으면 어제)부터 거꾸로 이어진 날 수, best: 가장 길게 이어진 날 수.
+ */
+export function streakOf(done: Set<string>, today: string): { current: number; best: number } {
+  let k = done.has(today) ? today : addDays(today, -1);
+  let current = 0;
+  while (done.has(k)) {
+    current++;
+    k = addDays(k, -1);
+  }
+  let best = 0;
+  for (const d of done) {
+    if (done.has(addDays(d, -1))) continue; // 연속 구간의 첫날에서만 센다
+    let run = 0;
+    for (let x = d; done.has(x); x = addDays(x, 1)) run++;
+    best = Math.max(best, run);
+  }
+  return { current, best };
+}

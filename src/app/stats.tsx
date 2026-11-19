@@ -17,7 +17,7 @@ import {
   COLS,
   FOCUS_CATEGORY,
   loadCategories,
-  loadStreak,
+  loadStreakStats,
   loadTimetable,
   ROWS,
   START_HOUR,
@@ -89,7 +89,7 @@ type Data = {
   month: Agg;
   prevRate: number | null;
   days: number;
-  streak: number;
+  streak: { current: number; best: number };
   overrunMin: number;
   /** [요일][시간행] 실제 칸 수 (최근 4주) */
   heat: number[][];
@@ -110,7 +110,7 @@ async function loadData(y: number, m0: number): Promise<Data> {
     loadMonthFocusStats(y, m0),
   ]);
 
-  const streak = await loadStreak(today);
+  const streak = await loadStreakStats(today);
 
   const heat = Array.from({ length: 7 }, () => Array<number>(ROWS).fill(0));
   recentDays.forEach((d, i) => {
@@ -220,7 +220,12 @@ function Summary({ data, styles, theme }: { data: Data } & SP) {
       value: data.month.planned ? `${rate}%` : '-',
       sub: diff == null ? '계획한 칸 중 채운 칸' : `지난달보다 ${diff >= 0 ? '+' : ''}${diff}%`,
     },
-    { label: '연속 기록', value: `${data.streak}일`, sub: '하루 1칸 이상 채운 날' },
+    {
+      label: '연속 기록',
+      value: `${data.streak.current}일`,
+      sub: `최장 ${data.streak.best}일`,
+      flame: data.streak.current > 0,
+    },
     { label: '휴식 초과', value: `${data.overrunMin}분`, sub: '딴짓한 시간', danger: true },
   ];
   return (
@@ -228,7 +233,10 @@ function Summary({ data, styles, theme }: { data: Data } & SP) {
       {cards.map((c) => (
         <View key={c.label} style={[styles.card, styles.statCard]}>
           <Text style={styles.statLabel}>{c.label}</Text>
-          <Text style={[styles.statValue, c.danger && { color: theme.red }]}>{c.value}</Text>
+          <View style={styles.statValueRow}>
+            {'flame' in c && c.flame ? <Ionicons name="flame" size={22} color={theme.amber} /> : null}
+            <Text style={[styles.statValue, c.danger && { color: theme.red }]}>{c.value}</Text>
+          </View>
           <Text style={styles.caption}>{c.sub}</Text>
         </View>
       ))}
@@ -454,6 +462,7 @@ const makeStyles = (theme: AppTheme) =>
     statCard: { flexBasis: '45%', flexGrow: 1, gap: 2 },
     statLabel: { ...PlannerType.caption, fontWeight: '700', color: theme.textSecondary },
     statValue: { ...PlannerType.display, fontSize: 26, lineHeight: 32, color: theme.ink },
+    statValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     subjectRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     dot: { width: 8, height: 8, borderRadius: 4 },
     subjectName: { ...PlannerType.label, color: theme.ink, width: 44 },

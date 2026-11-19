@@ -12,7 +12,7 @@ import { PlannerRadius, PlannerShadow, PlannerType, Spacing } from '@/constants/
 import { useTheme } from '@/constants/theme-context';
 import { usePrefs } from '@/hooks/use-prefs';
 import { addDays } from '@/lib/date';
-import { loadStreak, loadTimetable, timetableDateKey, totalActualMin } from '@/lib/timetable';
+import { loadStreakStats, loadTimetable, timetableDateKey, totalActualMin } from '@/lib/timetable';
 
 const WEEK_MON = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -39,13 +39,8 @@ async function loadData(today: string): Promise<Data> {
   const keys = Array.from({ length: 365 }, (_, i) => addDays(today, i - 364));
   const days = await Promise.all(keys.map(loadTimetable));
   const minutes = Object.fromEntries(keys.map((k, i) => [k, totalActualMin(days[i])]));
-  let longest = 0;
-  let run = 0;
-  for (const k of keys) {
-    run = minutes[k] ? run + 1 : 0;
-    longest = Math.max(longest, run);
-  }
-  return { streak: await loadStreak(today), longest, minutes };
+  const { current, best } = await loadStreakStats(today);
+  return { streak: current, longest: best, minutes };
 }
 
 /** I1 — 목표 · 연속 기록 */

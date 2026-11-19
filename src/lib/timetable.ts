@@ -3,8 +3,8 @@
 // 새벽 00~02시 기록은 '전날' 타임테이블에 속한다 (06시 기준으로 하루 구분).
 
 import { scheduleAutoBackup } from './backup';
-import { addDays } from './date';
-import { getItem, setItem } from './storage';
+import { addDays, streakOf } from './date';
+import { getItem, getKeysWithPrefix, setItem } from './storage';
 
 export type SubjectId = string;
 
@@ -155,11 +155,19 @@ export async function saveCategories(cats: Category[]): Promise<void> {
 
 /** 연속 기록: 오늘(아직 비었으면 어제)부터 거꾸로 1칸 이상 채운 날 수 */
 export async function loadStreak(today: string = timetableDateKey()): Promise<number> {
-  let k = today;
-  if (!totalActualMin(await loadTimetable(k))) k = addDays(k, -1);
-  let n = 0;
-  for (; n < 365; n++, k = addDays(k, -1)) if (!totalActualMin(await loadTimetable(k))) break;
-  return n;
+  return (await loadStreakStats(today)).current;
+}
+
+/**
+ * 연속 기록(현재) + 최장 기록. 하루 1칸(10분) 이상 채운 날이 이어진 수.
+ * 하루라도 비면 현재 기록은 0부터 다시. 오늘은 아직 안 채웠어도 어제까지의 기록을 유지.
+ */
+export async function loadStreakStats(
+  today: string = timetableDateKey(),
+): Promise<{ current: number; best: number }> {
+  const keys = (await getKeysWithPrefix(TT_PREFIX)).map((k) => k.slice(TT_PREFIX.length));
+  const days = await Promise.all(keys.map(loadTimetable));
+  return streakOf(new Set(keys.filter((_, i) => totalActualMin(days[i]) > 0)), today);
 }
 
 /** 블록에서 아직 안 채운 계획 분 (nowIdx 이전 칸은 지난 것으로 보고 뺀다, 오늘 아니면 -1) */
