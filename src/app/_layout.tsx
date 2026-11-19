@@ -7,7 +7,7 @@ import {
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { LogBox, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { Planner, PlannerDark, PlannerRadius, PlannerType } from '@/constants/theme';
@@ -15,6 +15,11 @@ import { PlannerThemeProvider, useThemeControl } from '@/constants/theme-context
 import { initPro } from '@/lib/pro';
 
 SplashScreen.preventAutoHideAsync();
+
+// expo-router(57.0.20~31) 내부 경고: 앱이 URL로 열리면 useLinking.native.js가 아직 마운트 전인
+// NavigationContainer에 setState를 한다(dev client는 항상 URL로 실행). 개발 빌드 전용 경고이고 동작 영향 없음.
+// expo-router 업데이트 시 해당 코드가 바뀌었으면 이 줄을 지운다.
+LogBox.ignoreLogs(["Can't perform a React state update on a component that hasn't mounted yet"]);
 
 export default function RootLayout() {
   return (
