@@ -1,7 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { Alert } from 'react-native';
 import { useEffect, useState } from 'react';
 
 import { supabase } from './supabase';
@@ -10,29 +9,17 @@ WebBrowser.maybeCompleteAuthSession();
 
 const redirectTo = Linking.createURL('auth/callback');
 
-/** 로그인 때 받은 provider_refresh_token을 Supabase 테이블에 저장 (Edge Function이 사용) */
-async function storeRefreshToken(session: Session | null): Promise<string> {
-  if (!session) return 'no-session';
-  const rt = session.provider_refresh_token;
-  if (!rt) return 'no-refresh-token'; // 구글이 refresh token을 안 줌 (prompt/scope 문제)
-  // Edge Function 경유로 저장 (service_role → RLS/세션 타이밍 문제 우회)
-  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
-    'google-token',
-    { body: { refresh_token: rt } },
-  );
-  if (error) return `invoke: ${error.message}`;
-  if (data && data.ok === false) return `store: ${data.error ?? '?'}`;
-  return 'ok';
-}
-
-/** 구글 OAuth 로그인 (PKCE + 인앱 브라우저) */
+/**
+ * 구글 OAuth 로그인 (PKCE + 인앱 브라우저). 인증(이메일·프로필)만 쓰고
+ * 구글 API용 토큰은 요청·저장하지 않는다.
+ */
 export async function signInWithGoogle(): Promise<void> {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo,
       skipBrowserRedirect: true,
-      queryParams: { access_type: 'offline', prompt: 'consent' },
+      queryParams: { prompt: 'select_account' },
     },
   });
   if (error) throw error;
@@ -42,14 +29,8 @@ export async function signInWithGoogle(): Promise<void> {
   if (result.type === 'success') {
     const code = Linking.parse(result.url).queryParams?.code;
     if (code) {
-      const { data: exData, error: exchangeError } =
-        await supabase.auth.exchangeCodeForSession(String(code));
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(String(code));
       if (exchangeError) throw exchangeError;
-      // 자동 토큰 갱신용: refresh token을 서버에 저장
-      const saveStatus = await storeRefreshToken(exData.session);
-      if (saveStatus !== 'ok') {
-        Alert.alert('[디버그] 토큰 저장 상태', saveStatus);
-      }
     }
   }
 }
@@ -79,11 +60,7 @@ export function useAuthSession() {
       setSession(data.session);
       setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      // 로그인 시 refresh token이 세션에 담겨 오면 저장 (exchange 경로를 놓쳐도 보강)
-      if (next?.provider_refresh_token) void storeRefreshToken(next);
-    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
     return () => sub.subscription.unsubscribe();
   }, []);
 
