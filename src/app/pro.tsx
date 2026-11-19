@@ -69,6 +69,13 @@ export default function ProScreen() {
     }
   }
 
+  /** 약관·방침 보기 — 시트(Modal)가 화면을 덮지 않게 닫고 이동 */
+  const openLegal = (doc: 'terms' | 'privacy') => {
+    if (busy) return;
+    setConfirm(false);
+    router.push(`/legal?doc=${doc}` as never);
+  };
+
   /** 결제 진행 중엔 시트를 닫지 않는다 */
   const closeConfirm = () => {
     if (!busy) setConfirm(false);
@@ -249,7 +256,15 @@ export default function ProScreen() {
               <Text style={styles.label}>{nextBilling}</Text>
             </View>
             <Text style={[styles.caption, { color: theme.textTertiary }]}>
-              결제하면 이용약관과 개인정보 처리방침에 동의하게 됩니다. 실제 결제창은 스토어가 띄워요.
+              결제하면{' '}
+              <Text style={styles.link} onPress={() => openLegal('terms')} accessibilityRole="link">
+                이용약관
+              </Text>
+              과{' '}
+              <Text style={styles.link} onPress={() => openLegal('privacy')} accessibilityRole="link">
+                개인정보처리방침
+              </Text>
+              에 동의하게 됩니다. 실제 결제창은 스토어가 띄워요.
             </Text>
             <Pressable
               style={[styles.primary, busy && styles.primaryBusy]}
@@ -281,6 +296,7 @@ const makeStyles = (theme: AppTheme) =>
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: Spacing.four },
     centerText: { textAlign: 'center' },
     underline: { textDecorationLine: 'underline' },
+    link: { color: theme.textSecondary, textDecorationLine: 'underline' },
     hero: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 6 },
     appIcon: {
       width: 64,
