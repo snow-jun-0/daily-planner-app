@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { cubicBezier, useReducedMotion } from 'react-native-reanimated';
 
 import { NewCategorySheet } from '@/components/planner/category-form';
 import { CircularProgress } from '@/components/planner/circular-progress';
@@ -48,6 +50,7 @@ import {
 } from '@/lib/timetable';
 
 const CELL_H = 26;
+const EASE_OUT = cubicBezier(0.23, 1, 0.32, 1);
 
 function fmtTotal(min: number): string {
   const h = Math.floor(min / 60);
@@ -174,6 +177,28 @@ export function TimetableGrid({
   useEffect(() => {
     void loadStreakStats().then(setStreak);
   }, [todayFilled]);
+
+  // 오늘 목표를 '막' 넘긴 순간에만 링을 한 번 튀게 + 햅틱 (화면을 열 때 이미 달성이면 X)
+  const reduced = useReducedMotion();
+  const [goalPulse, setGoalPulse] = useState(0);
+  const goalWasMet = useRef<boolean | null>(null);
+  const goalMet = (() => {
+    if (!isToday || !day) return null;
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const h = prefs.goalHours[(new Date(y, m - 1, d).getDay() + 6) % 7] ?? 0;
+    return h > 0 && totalActualMin(day) >= h * 60;
+  })();
+  useEffect(() => {
+    if (goalMet === null) return;
+    if (goalWasMet.current === false && goalMet) {
+      setGoalPulse((n) => n + 1);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    goalWasMet.current = goalMet;
+  }, [goalMet]);
+  useEffect(() => {
+    goalWasMet.current = null; // 날짜가 바뀌면 다시 기준을 잡는다
+  }, [dateKey]);
 
   // 카테고리 화면(G9)에서 돌아오면 다시 읽는다
   useFocusEffect(
@@ -418,9 +443,29 @@ export function TimetableGrid({
     <View style={styles.card}>
       {/* I3: 목표 링 + 연속 기록 — 탭하면 목표 화면(I1) */}
       <Pressable style={styles.totalRow} onPress={() => router.push('/goals' as never)}>
-        <CircularProgress percent={goalPct} size={64} strokeWidth={7}>
-          <Text style={styles.ringText}>{goalPct}%</Text>
-        </CircularProgress>
+        <Animated.View
+          key={goalPulse}
+          style={
+            goalPulse && !reduced
+              ? {
+                  animationName: {
+                    '0%': { transform: [{ scale: 1 }] },
+                    '40%': { transform: [{ scale: 1.12 }] },
+                    '100%': { transform: [{ scale: 1 }] },
+                  },
+                  animationDuration: 600,
+                  animationTimingFunction: EASE_OUT,
+                }
+              : undefined
+          }>
+          <CircularProgress percent={goalPct} size={64} strokeWidth={7}>
+            {goalPct >= 100 ? (
+              <Ionicons name="checkmark" size={26} color={theme.green} />
+            ) : (
+              <Text style={styles.ringText}>{goalPct}%</Text>
+            )}
+          </CircularProgress>
+        </Animated.View>
         <View style={{ flex: 1 }}>
           <Text style={styles.totalLabel}>TOTAL TIME</Text>
           <Text style={styles.totalValue}>{fmtTotal(actualMin)}</Text>
@@ -431,7 +476,9 @@ export function TimetableGrid({
           </Text>
         </View>
         <View style={styles.rateBox}>
-          <Text style={styles.rateSub}>목표 {goalH}H</Text>
+          <Text style={[styles.rateSub, goalPct >= 100 && { color: theme.green, fontWeight: '700' }]}>
+            {goalPct >= 100 ? '목표 달성' : `목표 ${goalH}H`}
+          </Text>
           {streak.current > 0 ? (
             <View style={styles.streakBadge}>
               <Ionicons name="flame" size={14} color={theme.amber} />
@@ -606,12 +653,13 @@ export function TimetableGrid({
                 const label = labelAt(idx);
                 const sub = subjectAt(idx);
                 return (
-                  <View
+                  <Animated.View
                     key={c}
                     accessible
                     accessibilityLabel={a11yAt(idx)}
                     style={[
                       styles.cell,
+                      styles.cellFade,
                       {
                         backgroundColor:
                           !sub && eventCell.has(idx)
@@ -633,7 +681,7 @@ export function TimetableGrid({
                         {label}
                       </Text>
                     ) : null}
-                  </View>
+                  </Animated.View>
                 );
               })}
             </View>
@@ -860,6 +908,8 @@ const makeStyles = (theme: AppTheme) =>
     grid: { flex: 1, position: 'relative' },
     gridRow: { flexDirection: 'row', height: CELL_H },
     cell: { flex: 1, borderWidth: 0.5, borderColor: theme.line },
+    // 칠하기/지우기는 자주 하는 동작 → 거의 티 안 나게 짧게
+    cellFade: { transitionProperty: 'backgroundColor', transitionDuration: 120 },
     nowLine: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: theme.red },
     legendRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },

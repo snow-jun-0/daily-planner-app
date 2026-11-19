@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import type { AppTheme } from '@/constants/theme';
 import { PlannerType } from '@/constants/theme';
@@ -60,10 +61,13 @@ export function LiveFillBlocks({ live }: { live: LiveFill }) {
   return (
     <View style={[StyleSheet.absoluteFill, { flexDirection: 'row' }]} pointerEvents="none">
       {Array.from({ length: BLOCKS_PER_CELL }).map((_, b) => (
-        <View
+        <Animated.View
           key={b}
           style={{
             flex: 1,
+            // 1분마다 한 블록씩 차오를 때 부드럽게
+            transitionProperty: 'backgroundColor',
+            transitionDuration: 400,
             backgroundColor:
               b >= live.from && b < live.done
                 ? live.color
