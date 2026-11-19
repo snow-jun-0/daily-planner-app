@@ -103,7 +103,20 @@ export async function initPro(): Promise<void> {
 
 export type PurchaseResult = { ok: true } | { ok: false; cancelled: boolean; message: string };
 
+/** 진행 중인 결제 — 버튼 연타 등으로 겹쳐 들어온 호출은 무시해 중복 결제를 막는다 */
+let purchasing = false;
+
 export async function purchasePro(plan: ProPlan): Promise<PurchaseResult> {
+  if (purchasing) return { ok: false, cancelled: true, message: '' };
+  purchasing = true;
+  try {
+    return await purchaseOnce(plan);
+  } finally {
+    purchasing = false;
+  }
+}
+
+async function purchaseOnce(plan: ProPlan): Promise<PurchaseResult> {
   const pkg = state.packages[plan];
   if (!state.available || !pkg)
     return { ok: false, cancelled: false, message: '아직 스토어 상품이 준비되지 않았어요.' };

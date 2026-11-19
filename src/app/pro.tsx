@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ProBadge } from '@/components/planner/pro-lock';
 import type { AppTheme } from '@/constants/theme';
@@ -31,6 +31,7 @@ export default function ProScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const pro = usePro();
+  const insets = useSafeAreaInsets();
   const [plan, setPlan] = useState<ProPlan>('annual');
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -44,18 +45,34 @@ export default function ProScreen() {
   const store = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
 
   async function buy() {
+    if (busy) return;
     setBusy(true);
-    const r = await purchasePro(plan);
-    setBusy(false);
-    setConfirm(false);
-    if (r.ok) setDone(true);
-    else if (!r.cancelled) Alert.alert('결제하지 못했어요', r.message);
+    try {
+      const r = await purchasePro(plan); // 겹친 호출은 purchasePro가 무시(cancelled)
+      if (r.ok) {
+        setConfirm(false);
+        setDone(true);
+      } else if (!r.cancelled) Alert.alert('결제하지 못했어요', r.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function restore() {
-    const ok = await restorePro();
-    Alert.alert('구매 복원', ok ? 'Pro를 복원했어요.' : '복원할 구매 내역이 없어요.');
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ok = await restorePro();
+      Alert.alert('구매 복원', ok ? 'Pro를 복원했어요.' : '복원할 구매 내역이 없어요.');
+    } finally {
+      setBusy(false);
+    }
   }
+
+  /** 결제 진행 중엔 시트를 닫지 않는다 */
+  const closeConfirm = () => {
+    if (!busy) setConfirm(false);
+  };
 
   // ── J4: 결제 완료 ──
   if (done) {
@@ -185,7 +202,7 @@ export default function ProScreen() {
               {plan === 'annual' ? '연간' : '월간'}으로 Pro 시작하기
             </Text>
           </Pressable>
-          <Pressable onPress={() => void restore()} style={styles.linkBtn}>
+          <Pressable onPress={() => void restore()} style={styles.linkBtn} disabled={busy}>
             <Text style={styles.caption}>언제든 해지할 수 있어요 · 구매 복원</Text>
           </Pressable>
           <Text style={[styles.caption, styles.centerText, { color: theme.textTertiary }]}>
@@ -205,9 +222,11 @@ export default function ProScreen() {
       ) : null}
 
       {/* J3: 구독 확인 — 실제 결제창은 이 다음 스토어가 띄운다 */}
-      <Modal visible={confirm} transparent animationType="slide" onRequestClose={() => setConfirm(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setConfirm(false)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+      <Modal visible={confirm} transparent animationType="slide" onRequestClose={closeConfirm}>
+        <Pressable style={styles.backdrop} onPress={closeConfirm}>
+          <Pressable
+            style={[styles.sheet, { paddingBottom: 20 + insets.bottom }]}
+            onPress={() => {}}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>구독 확인</Text>
             <View style={styles.productRow}>
@@ -232,10 +251,19 @@ export default function ProScreen() {
             <Text style={[styles.caption, { color: theme.textTertiary }]}>
               결제하면 이용약관과 개인정보 처리방침에 동의하게 됩니다. 실제 결제창은 스토어가 띄워요.
             </Text>
-            <Pressable style={styles.primary} onPress={() => void buy()} disabled={busy}>
-              <Text style={styles.primaryText}>
-                {busy ? '결제 진행 중…' : `${priceOf(plan)} 결제하고 시작`}
-              </Text>
+            <Pressable
+              style={[styles.primary, busy && styles.primaryBusy]}
+              onPress={() => void buy()}
+              disabled={busy}
+              accessibilityState={{ disabled: busy, busy }}>
+              {busy ? (
+                <View style={styles.busyRow}>
+                  <ActivityIndicator color={theme.onAccent} />
+                  <Text style={styles.primaryText}>결제 진행 중…</Text>
+                </View>
+              ) : (
+                <Text style={styles.primaryText}>{`${priceOf(plan)} 결제하고 시작`}</Text>
+              )}
             </Pressable>
             <Text style={[styles.caption, styles.centerText]}>스토어 › 구독에서 언제든 해지</Text>
           </Pressable>
@@ -336,6 +364,8 @@ const makeStyles = (theme: AppTheme) =>
       alignItems: 'center',
     },
     primaryText: { ...PlannerType.bodyMedium, fontWeight: '700', color: theme.onAccent },
+    primaryBusy: { opacity: 0.6 },
+    busyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     linkBtn: { alignItems: 'center', paddingVertical: 6 },
     doneIcon: {
       width: 72,
