@@ -2,12 +2,12 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Alert, Linking, Platform } from 'react-native';
 
-// TODO(출시): 문의 받을 이메일 주소. 비어 있으면 '문의하기'가 준비 중 안내를 띄운다.
-export const CONTACT_EMAIL = '';
+// 문의 받을 이메일 주소. 비어 있으면 '문의하기'가 준비 중 안내를 띄운다.
+export const CONTACT_EMAIL = 'dailyplanner.help@gmail.com';
 
-// TODO(출시): 운영자(개인정보 보호책임자) 이름과 문서 시행일
-export const OPERATOR_NAME = '[운영자 이름]';
-export const LEGAL_EFFECTIVE_DATE = '[2026년 ○월 ○일]';
+// 운영자(개인정보 보호책임자) 이름과 약관·방침 시행일 (출시 확정 시 시행일 갱신)
+export const OPERATOR_NAME = 'snow-jun';
+export const LEGAL_EFFECTIVE_DATE = '2026년 11월 20일';
 
 /** 문의 메일 작성창 열기 — 앱 버전·기기 정보를 본문에 미리 채운다 */
 export async function openContact(): Promise<void> {

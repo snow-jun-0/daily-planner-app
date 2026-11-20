@@ -40,7 +40,7 @@ const PRIVACY: Doc = {
     [
       '5. 처리 위탁 및 국외 이전',
       `앱 운영을 위해 아래 업체에 개인정보 처리를 맡기며, 일부는 국외 서버에 저장될 수 있습니다.
-· Supabase Inc. — 계정 관리, 클라우드 백업 저장 (서버 위치: [리전 기재])
+· Supabase Inc. — 계정 관리, 클라우드 백업 저장 (서버 위치: 대한민국 서울 — Northeast Asia (Seoul))
 · Google LLC — 구글 계정 로그인
 · RevenueCat Inc. — 구독 상태 관리 (미국)
 · Google LLC / Apple Inc. — 앱 마켓 결제 처리
