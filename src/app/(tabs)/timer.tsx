@@ -36,7 +36,6 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 const RING_SIZE = 252;
-const RING_STROKE = 14;
 const SESSIONS_GOAL = 4;
 const TICK_MS = 250;
 
@@ -136,7 +135,6 @@ export default function TimerScreen() {
     return () => sub.remove();
   }, [focusMode]);
   const totalMs = pomodoro.getPhaseDurationMs(phase, settings);
-  const percent = totalMs > 0 ? (remainingMs / totalMs) * 100 : 0;
   const isRunning = status === 'running';
 
   const isOverrun = status === 'overrun';

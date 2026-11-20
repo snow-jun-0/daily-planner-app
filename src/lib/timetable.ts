@@ -3,7 +3,7 @@
 // 새벽 00~02시 기록은 '전날' 타임테이블에 속한다 (06시 기준으로 하루 구분).
 
 import { scheduleAutoBackup } from './backup';
-import { addDays, streakOf } from './date';
+import { streakOf } from './date';
 import { getItem, getKeysWithPrefix, setItem } from './storage';
 
 export type SubjectId = string;
